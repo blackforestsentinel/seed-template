@@ -1,0 +1,10 @@
+# Einzige Wahrheit über Projekt und Features. Terraform und Pipeline lesen diese Datei.
+project: my-app
+
+features:
+  # Phase 2: Login per MSAL und Token-Prüfung in der Function
+  sso: false
+  # Phase 2: Storage Account (Table, Blob) mit Managed-Identity-Zugriff
+  storage: false
+  # Phase 4: Custom Connector für die Power Platform, setzt sso voraus
+  customConnector: false

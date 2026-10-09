@@ -1,0 +1,26 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #1f2328;
+  background: #ffffff;
+}
+
+body {
+  margin: 0;
+}
+
+header {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #d0d7de;
+}
+
+nav a {
+  color: inherit;
+}
+
+main {
+  padding: 1.5rem;
+  max-width: 60rem;
+}
