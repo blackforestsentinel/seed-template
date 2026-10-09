@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "Seed__Project": "my-app",
+    "Seed__Environment": "local"
+  },
+  "Host": {
+    "CORS": "http://localhost:5173"
+  }
+}

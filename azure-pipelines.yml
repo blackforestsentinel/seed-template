@@ -1,0 +1,29 @@
+# Die eigentliche Pipeline liegt im Hub: github.com/blackforestsentinel/seed-pipelines
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+resources:
+  repositories:
+    - repository: seed
+      type: github
+      name: blackforestsentinel/seed-pipelines
+      ref: refs/tags/v0.1.0
+      # GitHub-Service-Connection der Azure-DevOps-Organisation (nur Lesezugriff nötig)
+      endpoint: github-blackforestsentinel
+
+extends:
+  template: templates/web-app.yml@seed
+  parameters:
+    project: my-app
+    serviceConnection: sc-my-app
+    # Ablage des Terraform-States im Tenant, angelegt beim Tenant-Onboarding
+    terraformState:
+      resourceGroup: rg-terraform-state
+      storageAccount: stterraformstate
+      container: tfstate
+    environments:
+      - name: dev
