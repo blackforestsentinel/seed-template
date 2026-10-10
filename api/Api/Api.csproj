@@ -23,6 +23,11 @@
     <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
+  <!-- Zuordnung Rolle → Capabilities (auth.roles) für Bfs.Seed.Auth: lokal, in Tests und in Azure dieselbe Datei. -->
+  <ItemGroup>
+    <None Include="..\..\project.yaml" Link="project.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Api.Tests" />
   </ItemGroup>

@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import { createHttpClient, type RuntimeConfig } from '@blackforestsentinel/seed-web-core';
+import { loadSeedUser, type SeedUser } from '@blackforestsentinel/seed-web-auth/react';
 
 export interface HealthReport {
   status: string;
@@ -10,6 +11,8 @@ export interface HealthReport {
 
 export interface ApiClient {
   getHealth(): Promise<HealthReport>;
+  /** Angemeldete Person mit Rollen und Capabilities (GET /api/me). */
+  getMe(): Promise<SeedUser>;
 }
 
 /** getAccessToken kommt aus der Anmeldung (Feature sso) und hängt ein Bearer-Token an. */
@@ -18,6 +21,7 @@ export function createApiClient(config: RuntimeConfig, getAccessToken?: () => Pr
 
   return {
     getHealth: () => http.get<HealthReport>('/api/health'),
+    getMe: () => loadSeedUser(http),
   };
 }
 

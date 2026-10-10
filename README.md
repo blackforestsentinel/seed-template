@@ -42,10 +42,15 @@ npm run dev
 
 Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
+**Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
+
+Wer lokal gegen Entra ID testen will, entfernt `Auth__Mode`, trägt die Werte aus dem Terraform-Output der Umgebung `dev` ein (`Auth__TenantId`, `Auth__ClientId`, `Auth__Audience` in `local.settings.json`, `frontend_config` in `public/config.json`); `http://localhost:5173/` ist in `dev` als Redirect-URI eingetragen.
+
 ## Bausteine im Code
 
 - **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
+- **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
 
@@ -59,9 +64,46 @@ In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 
 - **Infrastruktur:** Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function (`Seed__Features__Sso`, `Auth__*`).
 - **API:** `Program.cs` schaltet `builder.UseSeedAuth()` über `Seed__Features__Sso` ein. Dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`. Fehlen bei eingeschaltetem sso die Auth-Settings, startet die App nicht.
-- **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Lokal trägt `public/config.json` dafür die Werte aus dem Terraform-Output `frontend_config` ein.
+- **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Läuft das Refresh-Token ab (nach 24 Stunden), erneuert es die Sitzung still: erst im unsichtbaren iframe über die Bridge-Seite `frontend/redirect.html`, sonst per Umleitung ohne Dialog. Die Redirect-URI der Bridge-Seite trägt Terraform ein.
 
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
+
+#### Rollen und Capabilities
+
+Rechte hängen an Capabilities wie `settings.manage`. Welche App-Rolle welche Capabilities bringt, steht nur in `project.yaml`:
+
+```yaml
+auth:
+  roles:
+    Admin:
+      description: Verwaltet die Anwendung
+      memberTypes: [User]                  # User, Application oder beide
+      capabilities: [settings.manage]
+  assignmentRequired: false
+```
+
+- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. `assignmentRequired: true` lässt nur Personen und Anwendungen mit einer Rolle überhaupt ein Token holen.
+- **API:** `api/Api/Api.csproj` verlinkt `project.yaml` in die Build-Ausgabe; `Bfs.Seed.Auth` liest daraus die Zuordnung, lokal wie in Azure. `[RequireCapability("settings.manage")]` an Function oder Klasse verlangt eine Capability (sonst 403), `User.HasCapability(...)` prüft im Code. Eine Capability, die keine Rolle vergibt, lässt die App nicht starten; `AuthTests` findet solche Tippfehler schon im Build. Eine geänderte Zuordnung braucht nur einen Deploy, eine neue Rolle die Infrastruktur-Freigabe.
+- **Frontend:** `SeedUserProvider` lädt `GET /api/me`; `<IfCapability capability="settings.manage">` und `useCapabilities()` aus `@blackforestsentinel/seed-web-auth/react` blenden Elemente ein oder aus. Das Frontend kennt die Zuordnung nicht, und die Prüfung macht immer die API.
+- **Dienste ohne angemeldete Person:** Eine Rolle mit `memberTypes: [Application]` erlaubt App-only-Tokens (Client-Credentials-Flow); die aufrufende Anwendung bekommt die Rolle als Anwendungsberechtigung. Tokens ohne passende Rolle lehnt die API ab.
+
+Ohne `auth`-Abschnitt gibt es keine Rollen, und alles läuft wie bisher.
+
+#### Vorhandene App-Registrierung, auch aus einem anderen Tenant
+
+Läuft die Anmeldung in einer Umgebung über eine Registrierung, die der Kunde selbst verwaltet, steht sie je Umgebung in `project.yaml`:
+
+```yaml
+auth:
+  existingRegistration:
+    prod:
+      tenantId: <tenant-id des Kunden>
+      apiClientId: <client-id der API>
+      spaClientId: <client-id der SPA>
+      apiScope: api://<client-id der API>/access_as_user
+```
+
+Terraform legt dann für diese Umgebung keine Registrierungen an; API und Frontend melden sich im angegebenen Tenant an. Was der Admin dort einrichten muss (Redirect-URIs samt Bridge-Seite, Vorautorisierung der SPA, App-Rollen gemäß `auth.roles`, Zuweisungen), steht in der README von [seed-terraform](https://github.com/blackforestsentinel/seed-terraform) beim Modul `sso`.
 
 `storage` und `customConnector` folgen.
 

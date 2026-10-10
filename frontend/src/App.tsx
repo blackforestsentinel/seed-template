@@ -1,9 +1,13 @@
 import { NavLink, Route, Routes } from 'react-router';
+import { useSeedUser } from '@blackforestsentinel/seed-web-auth/react';
 import { useAuth } from './auth';
 import { HomePage } from './pages/HomePage';
 
 export function App() {
   const auth = useAuth();
+  const { user } = useSeedUser();
+  // Lokal ohne MSAL kommt der Name von der API (Entwicklungsnutzer).
+  const name = auth?.account ? (auth.account.name ?? auth.account.username) : (user?.name ?? user?.username);
 
   return (
     <div className="app">
@@ -12,12 +16,14 @@ export function App() {
         <nav>
           <NavLink to="/">Start</NavLink>
         </nav>
-        {auth?.account && (
+        {name && (
           <span className="account">
-            {auth.account.name ?? auth.account.username}
-            <button type="button" onClick={() => void auth.logout()}>
-              Abmelden
-            </button>
+            {name}
+            {auth && (
+              <button type="button" onClick={() => void auth.logout()}>
+                Abmelden
+              </button>
+            )}
           </span>
         )}
       </header>
