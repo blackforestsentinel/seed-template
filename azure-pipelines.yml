@@ -11,7 +11,7 @@ resources:
     - repository: seed
       type: github
       name: blackforestsentinel/seed-pipelines
-      ref: refs/tags/v0.3.0
+      ref: refs/tags/v0.4.0
       # GitHub-Service-Connection der Azure-DevOps-Organisation (nur Lesezugriff nötig)
       endpoint: github-blackforestsentinel
 
@@ -19,6 +19,8 @@ extends:
   template: templates/web-app.yml@seed
   parameters:
     project: my-app
+    # Ohne Frontend (project.yaml: hosting.staticWebApp: none) zusätzlich:
+    # frontend: false
     serviceConnection: sc-my-app
     # Ablage des Terraform-States im Tenant, angelegt beim Tenant-Onboarding
     terraformState:
