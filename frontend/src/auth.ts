@@ -18,5 +18,6 @@ export async function startAuth(config: SeedAuthConfig | undefined): Promise<See
   }
 
   const { createSeedAuth } = await import('@blackforestsentinel/seed-web-auth');
-  return createSeedAuth(config);
+  // Muss zu den Redirect-URIs des Terraform-Moduls sso passen (mit abschließendem Schrägstrich).
+  return createSeedAuth(config, { redirectUri: `${window.location.origin}/` });
 }
