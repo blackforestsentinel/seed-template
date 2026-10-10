@@ -10,5 +10,9 @@ features:
   customConnector: false
 
 hosting:
-  # Tarif der Static Web App: Free (höchstens 10 je Subscription) oder Standard
+  # Tarif der Static Web App: Free (höchstens 10 je Subscription), Standard oder none
+  # (kein Frontend, nur API; dazu in azure-pipelines.yml frontend: false)
   staticWebApp: Free
+  # Eigene Domains der Static Web App, z. B. [app.example.org]. Die nötigen DNS-Einträge
+  # stehen nach dem Apply im Terraform-Output custom_domain_dns_records.
+  customDomains: []
