@@ -258,7 +258,12 @@ storage:
 
 **Fehler und Poison-Queue:** Wirft eine Queue-Function, stellt die Queue die Nachricht nach 30 Sekunden erneut zu (`host.json`: `visibilityTimeout`), höchstens fünfmal (`maxDequeueCount`). Danach verschiebt der Host sie in `<queue>-poison` (hier `jobs-poison`), die er selbst anlegt. Dort verarbeitet sie niemand; nach 7 Tagen verfällt sie. Nachrichten kommen mindestens einmal an, die Verarbeitung muss also wiederholbar sein; das Beispiel prüft dafür den Status in der Tabelle.
 
-**Vorsicht beim Entfernen:** Fällt eine Tabelle, Queue oder ein Container aus `project.yaml` heraus oder wird `storage` wieder `false`, löscht der nächste Apply sie samt Inhalt. Container bleiben 7 Tage wiederherstellbar, Tabellen und Queues nicht. Vor der Infrastruktur-Freigabe den Plan auf `destroy` prüfen. Ein Backup gehört noch nicht zum Baustein.
+**Schutz vor dem Löschen:** Fällt eine Tabelle, Queue oder ein Container aus `project.yaml` heraus oder wird `storage` wieder `false`, würde der nächste Apply sie samt Inhalt löschen; Tabellen und Queues lassen sich nicht wiederherstellen, Container 7 Tage lang. Davor stehen zwei Schichten:
+
+- Der Storage Account hat eine Löschsperre (`storage.deletionLock: true`, Standard). Sie verhindert das Löschen im Portal, per CLI und mit der Resource Group, und auch ein Apply, der eine Tabelle, Queue oder einen Container entfernt, scheitert an ihr.
+- Die Pipeline bricht einen Plan, der Daten löscht oder ersetzt, vor der Freigabe ab. Ist das Löschen gewollt: Pipeline von Hand starten, „Datenlöschung bestätigen“ ankreuzen, Plan prüfen, freigeben. In diesem Lauf hebt Terraform die Sperre auf; der nächste normale Lauf setzt sie wieder und braucht dafür eine Freigabe.
+
+Ein Backup gehört noch nicht zum Baustein.
 
 **Lokal mit Azurite:** `local.settings.sample.json` enthält `SeedStorage = UseDevelopmentStorage=true`; lokal legt das Paket Tabellen, Queues und Container beim ersten Zugriff an.
 
