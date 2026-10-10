@@ -6,6 +6,17 @@ output "resource_group_name" {
 
 output "function_app_name" {
   value = module.core.function_app_name
+
+  # Prüfungen für settings und environments aus project.yaml; sie betreffen diese Function App.
+  precondition {
+    condition     = length(local.project_settings_invalid) == 0
+    error_message = "settings in project.yaml: kein Text als Wert bei ${join(", ", local.project_settings_invalid)}. Zahlen und true/false gehen auch, Listen, Objekte und leere Werte nicht (leer: \"\")."
+  }
+
+  precondition {
+    condition     = length(local.env_unknown) == 0
+    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances und settings."
+  }
 }
 
 output "function_app_url" {
