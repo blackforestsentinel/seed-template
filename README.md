@@ -234,8 +234,6 @@ Nach rund 15 Sekunden meldet `/api/health` wieder `status: "ok"`. Ohne den letzt
 
 Ein Name, der aus `keyVault.secrets` verschwindet, verliert nur sein App-Setting; das Secret bleibt im Vault, bis jemand es mit `az keyvault secret delete` löscht. Details zu Rechten, Soft Delete und Wiederherstellung stehen in der README des Moduls [`keyvault`](https://github.com/blackforestsentinel/seed-terraform/tree/main/keyvault).
 
-`customConnector` folgt mit Phase 4.
-
 ### storage: Datenhaltung mit Table, Blob und Queue
 
 In `project.yaml` `storage: true` setzen, unter `storage:` Tabellen, Queues und Container eintragen und pushen:
@@ -271,7 +269,7 @@ azurite --inMemoryPersistence --skipApiVersionCheck   # eigenes Terminal
 
 In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` entfernen. `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
 
-`customConnector` folgt.
+`customConnector` folgt mit Phase 4.
 
 ## Monitoring
 
