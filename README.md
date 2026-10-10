@@ -35,10 +35,10 @@ Bis die Scaffold-Pipeline `seed-scaffold` steht, sind es diese Schritte in Azure
 1. Neues Repo anlegen und dieses Template importieren.
 2. In `project.yaml` den Projektnamen setzen (3–20 Zeichen, Kleinbuchstaben, Ziffern, Bindestriche).
 3. In `azure-pipelines.yml` `project`, `serviceConnection` und `terraformState` eintragen.
-4. Environment `<project>-dev` anlegen und bei Bedarf eine Freigabe (Approval) daran hängen.
-5. Pipeline aus `azure-pipelines.yml` anlegen und starten.
+4. Environments anlegen: `<project>-dev` mit einer Freigabe (Approval) für Infrastruktur-Änderungen und `<project>-dev-app` für den App-Deploy, ohne Freigabe. In Produktion kann auch am App-Environment eine Freigabe hängen.
+5. Pipeline aus `azure-pipelines.yml` anlegen, für beide Environments berechtigen und starten.
 
-Die Pipeline baut und testet, plant die Infrastruktur, wartet auf die Freigabe, wendet den Plan an, deployt Function und Frontend und prüft beides per Smoke-Test.
+Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infrastruktur ändert, wartet sie auf die Freigabe und wendet den Plan an. Danach deployt sie Function und Frontend und prüft beides per Smoke-Test.
 
 ## Lokal entwickeln
 
