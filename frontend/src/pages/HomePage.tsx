@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { IfCapability } from '@blackforestsentinel/seed-web-auth/react';
 import { useApi } from '../api';
 
 export function HomePage() {
@@ -16,6 +17,11 @@ export function HomePage() {
           {health.data.version}
         </p>
       )}
+      {/* Beispiel: nur mit der Capability settings.manage (Rolle Admin in project.yaml). Die API
+          prüft dieselbe Capability per [RequireCapability] an GET /api/settings. */}
+      <IfCapability capability="settings.manage">
+        <p>Du darfst die Einstellungen verwalten.</p>
+      </IfCapability>
     </section>
   );
 }
