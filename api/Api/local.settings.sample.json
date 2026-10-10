@@ -5,7 +5,15 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "Seed__Project": "my-app",
     "Seed__Environment": "local",
-    "Seed__Features__Sso": "false"
+    "Seed__Features__Sso": "false",
+    "Seed__Features__Mcp": "false",
+    "Seed__Features__Storage": "false",
+    "SeedStorage": "UseDevelopmentStorage=true",
+    "AzureWebJobs.CreateJob.Disabled": "true",
+    "AzureWebJobs.GetJob.Disabled": "true",
+    "AzureWebJobs.ProcessJob.Disabled": "true",
+    "Auth__Mode": "Local",
+    "Auth__LocalUser__Roles__0": "Admin"
   },
   "Host": {
     "CORS": "http://localhost:5173"

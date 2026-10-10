@@ -6,12 +6,20 @@ trigger:
 
 pr: none
 
+# Nur von Hand ankreuzen: erlaubt einem Lauf, Daten zu löschen (Storage, Key Vault, Logs).
+# Ohne Bestätigung endet ein Plan, der solche Ressourcen löscht oder ersetzt, vor der Freigabe.
+parameters:
+  - name: confirmDataDeletion
+    displayName: Datenlöschung bestätigen (Storage, Key Vault, Logs)
+    type: boolean
+    default: false
+
 resources:
   repositories:
     - repository: seed
       type: github
       name: blackforestsentinel/seed-pipelines
-      ref: refs/tags/v0.4.0
+      ref: refs/tags/v0.5.0
       # GitHub-Service-Connection der Azure-DevOps-Organisation (nur Lesezugriff nötig)
       endpoint: github-blackforestsentinel
 
@@ -27,5 +35,9 @@ extends:
       resourceGroup: rg-terraform-state
       storageAccount: stterraformstate
       container: tfstate
+    confirmDataDeletion: ${{ parameters.confirmDataDeletion }}
+    # Mit sso muss GET /api/me ohne Token mit 401 antworten.
+    smokeTest:
+      protectedPath: api/me
     environments:
       - name: dev
