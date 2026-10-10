@@ -21,7 +21,15 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    # Feature keyVault: Mit Purge-Schutz bleibt ein gelöschter Vault bis zum Ende der Frist
+    # soft-gelöscht. Der nächste Apply stellt ihn samt Secrets wieder her, statt am Namen zu
+    # scheitern; endgültig löschen kann ihn vorher niemand.
+    key_vault {
+      purge_soft_delete_on_destroy    = false
+      recover_soft_deleted_key_vaults = true
+    }
+  }
   storage_use_azuread = true
 }
 
