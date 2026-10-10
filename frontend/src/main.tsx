@@ -2,9 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { loadRuntimeConfig } from '@blackforestsentinel/seed-web-core';
 import { ApiContext, createApiClient } from './api';
 import { App } from './App';
-import { loadRuntimeConfig } from './config';
 import './styles.css';
 
 const root = createRoot(document.getElementById('root')!);

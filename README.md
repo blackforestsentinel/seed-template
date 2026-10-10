@@ -58,6 +58,13 @@ npm run dev
 
 Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
+## Bausteine im Code
+
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`.
+- **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
+
+Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
+
 ## Features
 
 `project.yaml` schaltet Features an oder aus. In Phase 1 gibt es nur die Basis; `sso`, `storage` und `customConnector` folgen.
