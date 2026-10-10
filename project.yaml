@@ -47,3 +47,15 @@ auth:
 #   customDomain: mcp.example.org
 #   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
 #   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]
+
+monitoring:
+  # Empfänger von Alarmen und Budget-Warnungen (Adresse oder Verteiler), z. B.
+  # [betrieb@example.org]. Ohne Empfänger gibt es keine Alarme und kein Budget.
+  recipients: []
+  # Monatsbudget der Resource Group je Umgebung in der Abrechnungswährung, z. B.
+  # { dev: 20, prod: 100 }. Warnung bei 80 % und wenn die Prognose den Betrag übersteigt.
+  budget: {}
+  # Alarm ab so vielen Exceptions in einer Stunde
+  exceptionsPerHour: 5
+  # Tageslimit für Logs in GB; danach nimmt Azure bis 0 Uhr UTC keine Telemetrie mehr an
+  dailyCapGb: 1
