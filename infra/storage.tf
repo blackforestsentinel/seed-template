@@ -40,6 +40,10 @@ module "storage" {
   queues     = try(local.storage_cfg.queues, [])
   containers = try(local.storage_cfg.containers, [])
 
+  # Löschsperre, außer im bestätigten Lauf der Pipeline (Datenlöschung bestätigen).
+  deletion_lock       = try(local.storage_cfg.deletionLock, true)
+  allow_data_deletion = var.allow_data_deletion
+
   blob_versioning_enabled     = try(local.storage_cfg.retention.versioning, true)
   blob_version_retention_days = try(local.storage_cfg.retention.versionDays, 7)
   blob_soft_delete_days       = try(local.storage_cfg.retention.softDeleteDays, 7)
