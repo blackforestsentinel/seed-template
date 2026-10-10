@@ -22,6 +22,7 @@ locals {
   # Ohne Empfänger keine Alarme und kein Budget; das Tageslimit für Logs gilt immer. Eine
   # einzelne Adresse statt einer Liste ist auch erlaubt.
   alert_recipients = compact(flatten([try(local.cfg.monitoring.recipients, [])]))
+  key_vault        = try(local.cfg.features.keyVault, false)
 }
 
 module "core" {
@@ -33,8 +34,14 @@ module "core" {
   static_web_app_sku   = local.static_web_app
   custom_domains       = local.custom_domains
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
-  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }, [for m in module.sso : m.app_settings]...)
-  log_daily_quota_gb   = try(local.cfg.monitoring.dailyCapGb, null)
+  # Je Feature das Flag und die App-Settings des Moduls.
+  app_settings = merge(concat(
+    [{ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }],
+    [for m in module.sso : m.app_settings],
+    [{ Seed__Features__KeyVault = tostring(local.key_vault) }],
+    [for m in module.keyvault : m.app_settings],
+  )...)
+  log_daily_quota_gb = try(local.cfg.monitoring.dailyCapGb, null)
 }
 
 module "sso" {
@@ -85,4 +92,19 @@ module "monitoring" {
   health_check_url           = "${module.core.function_app_url}/api/health"
   # Betrag je Umgebung oder einer für alle; ohne Betrag kein Budget.
   budget_amount = try(tonumber(local.cfg.monitoring.budget), local.cfg.monitoring.budget[var.environment], null)
+}
+
+# Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
+# Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
+module "keyvault" {
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.5.0"
+  count  = local.key_vault ? 1 : 0
+
+  name                           = local.cfg.project
+  environment                    = var.environment
+  resource_group_name            = module.core.resource_group_name
+  location                       = module.core.location
+  function_identity_principal_id = module.core.function_identity_principal_id
+  secrets                        = try(local.cfg.keyVault.secrets, [])
+  secret_officers                = try(local.cfg.keyVault.secretOfficers, [])
 }

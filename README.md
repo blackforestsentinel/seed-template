@@ -50,7 +50,7 @@ Wer lokal gegen Entra ID testen will, entfernt `Auth__Mode`, trägt die Werte au
 
 ## Bausteine im Code
 
-- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
 - **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
@@ -173,6 +173,64 @@ Danach in Claude Code `/mcp` → Server wählen → **Authenticate**. Der Port i
 **Andere Clients:** Jeder Client, der mit einem eigenen Entra-Token für die API und `mcp_access` kommt, wird angenommen; eine Liste zugelassener Clients gibt es nicht. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
 
 **Fehlerbilder:** `AADSTS9010010` nach der Anmeldung: eigene Domain fehlt oder die URL im Client weicht von `mcp_url` ab. Einwilligungsdialog oder `AADSTS65001`: Administratorzustimmung fehlt. Werkzeug fehlt in der Liste: Der Person fehlt die Capability (Werkzeug `ueberblick_abrufen` zeigt Rollen und Berechtigungen). Conditional Access mit Standortbedingung: Claude holt und erneuert Tokens von Anthropics Adressen (`160.79.104.0/21`), nicht vom Rechner der Person.
+
+### keyVault: Secrets von Drittanbietern
+
+Für API-Keys und Passwörter, die keine Managed Identity ersetzen kann (Stripe, SMTP, OpenAI usw.). Je Projekt und Umgebung entsteht ein eigener Key Vault.
+
+1. In `project.yaml` `keyVault: true` setzen und die Namen eintragen, dann pushen:
+
+   ```yaml
+   features:
+     keyVault: true
+   keyVault:
+     secrets: [stripe-key, smtp-password]
+     secretOfficers: [00000000-0000-0000-0000-000000000000]   # optional, Object-IDs
+   ```
+
+2. Die Pipeline plant neue Ressourcen und wartet auf die Infrastruktur-Freigabe. Terraform legt den Vault an (nur RBAC, Purge-Schutz, 90 Tage Soft Delete), je Secret einen Platzhalter und die App-Settings `Secrets__StripeKey` und `Secrets__SmtpPassword` als Key-Vault-Referenz. Die Function bekommt `Key Vault Secrets User`, die Personen oder Gruppen aus `secretOfficers` `Key Vault Secrets Officer`.
+3. Werte setzen (siehe unten). Bis dahin startet die API trotzdem; der Health-Endpunkt meldet `status: "degraded"` mit den Namen der fehlenden Secrets, und `Get()` wirft beim Gebrauch eine Meldung mit dem Namen.
+
+Namen: Kleinbuchstaben und Ziffern, Wörter durch Bindestriche getrennt. Im App-Setting beginnt jedes Wort groß und die Bindestriche entfallen: `stripe-key` wird `Secrets__StripeKey`, im Code `Secrets:StripeKey`.
+
+**Secret lesen:** `SeedSecrets` aus `Bfs.Seed.Functions.Core` ist über `AddSeedCore()` registriert. Erst beim Gebrauch lesen, nicht in `Program.cs`, damit die App auch ohne gesetzte Werte startet:
+
+```csharp
+public sealed class PaymentFunction(SeedSecrets secrets)
+{
+    [Function("Pay")]
+    public IActionResult Run([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "pay")] HttpRequest request)
+    {
+        var apiKey = secrets.Get("stripe-key");
+        // ...
+    }
+}
+```
+
+Lokal stehen die Werte in `api/Api/local.settings.json` unter `Values`, z. B. `"Secrets__StripeKey": "sk_test_..."` (die Datei ist nicht eingecheckt).
+
+#### Secret setzen
+
+Werte setzt ein Mensch per CLI oder Portal, nie die Pipeline. Nötig ist die Rolle **Key Vault Secrets Officer** auf dem Vault; Owner und Contributor reichen bei einem RBAC-Vault nicht. Entweder steht die eigene Object-ID unter `keyVault.secretOfficers`, oder jemand mit Owner auf der Subscription vergibt die Rolle einmalig:
+
+```bash
+RG=rg-my-app-dev
+KV=$(az keyvault list --resource-group $RG --query "[0].name" -o tsv)
+FUNC=$(az functionapp list --resource-group $RG --query "[0].name" -o tsv)
+
+# Nur falls die Rolle fehlt (wirkt nach einigen Minuten)
+az role assignment create --assignee "$(az ad signed-in-user show --query id -o tsv)"   --role "Key Vault Secrets Officer" --scope "$(az keyvault show --name $KV --query id -o tsv)"
+
+# Wert verdeckt eingeben: nicht in der Shell-History, nicht in der Ausgabe
+read -rs VALUE && az keyvault secret set --vault-name $KV --name stripe-key --value "$VALUE" --output none; unset VALUE
+
+# Neuen Wert sofort übernehmen (braucht Contributor oder Website Contributor auf der Function App)
+az rest --method post --url "https://management.azure.com$(az functionapp show --name $FUNC --resource-group $RG   --query id -o tsv)/config/configreferences/appsettings/refresh?api-version=2022-03-01"
+```
+
+Nach rund 15 Sekunden meldet `/api/health` wieder `status: "ok"`. Ohne den letzten Befehl übernimmt die Function den Wert beim nächsten Deploy, also beim nächsten Pipeline-Lauf, spätestens aber nach 24 Stunden. `az functionapp restart` reicht auf Flex Consumption nicht. Terraform überschreibt gesetzte Werte nicht wieder mit dem Platzhalter.
+
+Ein Name, der aus `keyVault.secrets` verschwindet, verliert nur sein App-Setting; das Secret bleibt im Vault, bis jemand es mit `az keyvault secret delete` löscht. Details zu Rechten, Soft Delete und Wiederherstellung stehen in der README des Moduls [`keyvault`](https://github.com/blackforestsentinel/seed-terraform/tree/main/keyvault).
 
 `storage` und `customConnector` folgen.
 

@@ -45,3 +45,9 @@ output "mcp_client_id" {
   description = "Client-ID der MCP-Client-Registrierung; in Claude als OAuth Client ID, in Claude Code als --client-id."
   value       = local.mcp ? one(module.sso[*].mcp_client_id) : ""
 }
+
+# Leer ohne Feature keyVault, wie static_web_app_name ohne Frontend.
+output "key_vault_name" {
+  description = "Name des Key Vaults für az keyvault secret set. Leer ohne Feature keyVault."
+  value       = try(module.keyvault[0].key_vault_name, "")
+}
