@@ -44,7 +44,7 @@ Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
 ## Bausteine im Code
 
-- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`.
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
@@ -64,6 +64,32 @@ In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
 
 `storage` und `customConnector` folgen.
+
+## Monitoring
+
+Jede Umgebung hat Application Insights mit Log Analytics. Application Insights nimmt nur Telemetrie mit Entra-Token an; die Function sendet per Managed Identity. Das Tageslimit für Logs (`dailyCapGb`, Default 1 GB) schützt vor Kostenausreißern, etwa durch eine Log-Schleife; ist es erreicht, kommt bis 0 Uhr UTC keine Telemetrie mehr an.
+
+Alarme und Budget schaltet ein Empfänger in `project.yaml` ein:
+
+```yaml
+monitoring:
+  recipients: [betrieb@example.org]
+  budget: { dev: 20, prod: 100 }
+  exceptionsPerHour: 5
+  dailyCapGb: 1
+```
+
+Dann legt Terraform je Umgebung an:
+
+- eine Aktionsgruppe, die an alle Empfänger mailt; Azure schickt jeder neuen Adresse einmal eine Bestätigung,
+- einen Alarm, sobald es in einer Stunde `exceptionsPerHour` Exceptions gab,
+- einen Webtest, der alle 15 Minuten aus Amsterdam und Dublin `/api/health` aufruft, und einen Alarm, wenn er von beiden Standorten aus scheitert,
+- einen Alarm, wenn das Tageslimit für Logs erreicht ist, weil bis zum Tageswechsel dann auch die übrigen Alarme still bleiben,
+- mit Betrag für die Umgebung ein Monatsbudget der Resource Group in der Abrechnungswährung: Warnung bei 80 % der tatsächlichen Kosten und wenn die Prognose den Betrag übersteigt. `budget: 50` gilt für alle Umgebungen.
+
+Die Meldungen enthalten nur Zählwerte, keine Inhalte von Exceptions oder Logs; die Details stehen in Application Insights. Der Health-Endpunkt muss ohne Token mit 200 antworten, deshalb trägt er `[AllowAnonymous]`. Webtest und Alarme kosten zusammen rund 4,50 Euro im Monat je Umgebung, Details und Entscheidungen im [Modul monitoring](https://github.com/blackforestsentinel/seed-terraform/tree/main/monitoring).
+
+Ohne `recipients` gibt es keine Alarme und kein Budget; Application Insights und das Tageslimit bleiben.
 
 ## Hosting
 
