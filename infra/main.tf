@@ -1,7 +1,13 @@
 locals {
   cfg = yamldecode(file("${path.root}/../project.yaml"))
-  sso = try(local.cfg.features.sso, false)
-  mcp = try(local.cfg.features.mcp, false)
+  # Abweichungen dieser Umgebung aus environments.<name>; ohne Eintrag gelten die allgemeinen
+  # Angaben. Unbekannte Schlüssel (Tippfehler) hält die Prüfung am Output function_app_name auf.
+  env         = try(local.cfg.environments[var.environment], {})
+  env_unknown = setsubtract(try(keys(local.env), []), ["features", "maxInstances", "settings"])
+  # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
+  features = merge(try(local.cfg.features, {}), try(local.env.features, {}))
+  sso      = try(local.features.sso, false)
+  mcp      = try(local.features.mcp, false)
 
   # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API).
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
@@ -22,7 +28,14 @@ locals {
   # Ohne Empfänger keine Alarme und kein Budget; das Tageslimit für Logs gilt immer. Eine
   # einzelne Adresse statt einer Liste ist auch erlaubt.
   alert_recipients = compact(flatten([try(local.cfg.monitoring.recipients, [])]))
-  key_vault        = try(local.cfg.features.keyVault, false)
+  key_vault        = try(local.features.keyVault, false)
+
+  # Eigene App-Settings: settings, ergänzt und überschrieben aus environments.<name>.settings.
+  # Zahlen und Booleans werden Text; leere Werte, Listen und Objekte hält die Prüfung am Output
+  # function_app_name mit einer Meldung auf.
+  project_settings_raw     = merge(try(local.cfg.settings, {}), try(local.env.settings, {}))
+  project_settings_invalid = [for k, v in local.project_settings_raw : k if v == null || !can(tostring(v))]
+  project_settings         = { for k, v in local.project_settings_raw : k => tostring(v) if !contains(local.project_settings_invalid, k) }
 }
 
 module "core" {
@@ -34,8 +47,10 @@ module "core" {
   static_web_app_sku   = local.static_web_app
   custom_domains       = local.custom_domains
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
-  # Je Feature das Flag und die App-Settings des Moduls.
+  # Eigene Settings zuerst, damit die Seed-eigenen bei gleichem Namen vorgehen; danach je
+  # Feature das Flag und die App-Settings des Moduls.
   app_settings = merge(concat(
+    [local.project_settings],
     [{ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }],
     [local.storage_app_settings],
     [for m in module.sso : m.app_settings],
@@ -43,6 +58,8 @@ module "core" {
     [for m in module.keyvault : m.app_settings],
   )...)
   log_daily_quota_gb = try(local.cfg.monitoring.dailyCapGb, null)
+  # Höchstens so viele Instanzen der Function; ohne Angabe der Default des Moduls.
+  maximum_instance_count = try(local.env.maxInstances, null)
 }
 
 module "sso" {

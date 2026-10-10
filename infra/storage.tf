@@ -1,7 +1,7 @@
 # Feature storage: eigener Storage Account mit Tabellen, Queues und Containern aus project.yaml.
 
 locals {
-  storage     = try(local.cfg.features.storage, false)
+  storage     = try(local.features.storage, false)
   storage_cfg = try(local.cfg.storage, {})
 
   # Beispiel in api/Api/Jobs; wer es löscht oder umbenennt, passt die Liste an.

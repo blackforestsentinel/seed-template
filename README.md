@@ -60,7 +60,7 @@ Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Proj
 
 ## Features
 
-`project.yaml` schaltet Features an oder aus, beim Start oder nachträglich. Der nächste Pipeline-Lauf ergänzt nur die neuen Ressourcen.
+`project.yaml` schaltet Features an oder aus, beim Start oder nachträglich. Der nächste Pipeline-Lauf ergänzt nur die neuen Ressourcen. Einzelne Umgebungen können abweichen, siehe [Einstellungen je Umgebung](#einstellungen-je-umgebung).
 
 ### sso: Login mit Entra ID
 
@@ -275,6 +275,34 @@ azurite --inMemoryPersistence --skipApiVersionCheck   # eigenes Terminal
 In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` entfernen. `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
 
 `customConnector` folgt mit Phase 4.
+
+## Einstellungen je Umgebung
+
+Eigene App-Settings, abweichende Feature-Schalter und die Obergrenze der Instanzen stehen in `project.yaml`, für alle Umgebungen oder je Umgebung:
+
+```yaml
+settings:                           # für alle Umgebungen
+  Beispiel__Zeitzone: Europe/Berlin
+
+environments:
+  test:                             # Name wie environments[].name in azure-pipelines.yml
+    features: { keyVault: false }   # überschreibt einzelne Schalter aus features
+    maxInstances: 1                 # höchstens so viele Instanzen der Function
+    settings:                       # ergänzt und überschreibt settings
+      Beispiel__Mocks: "true"
+  prod:
+    maxInstances: 4
+```
+
+- **App-Settings:** Terraform setzt `settings` und `environments.<name>.settings` als App-Settings der Function; bei gleichem Namen gilt der Wert der Umgebung. Im Code liest `IConfiguration` sie wie jede andere Einstellung, `Beispiel__Zeitzone` als `Beispiel:Zeitzone`. Seed-eigene Settings gehen bei gleichem Namen vor: die der Features (`Seed__*`, `Auth__*`, `SeedStorage__*`, `Secrets__*`, `Mcp__*`) und die Grundeinstellungen der Function (`AzureWebJobsStorage__*`, `APPLICATIONINSIGHTS_*`, `AZURE_CLIENT_ID`).
+- **Werte sind Text.** Zahlen und `true`/`false` nimmt Terraform als Text an, aber YAML liest manches anders, als es dasteht: `007` wird `7`, `1.50` wird `1.5`, `on` und `yes` werden `true`. Solche Werte in Anführungszeichen setzen. Listen, Objekte und leere Werte (für leer `""` schreiben) hält der Plan mit einer Meldung auf.
+- **Features:** `environments.<name>.features` überschreibt einzelne Schalter aus `features`, etwa ohne Key Vault in `test`. Terraform und die Flags `Seed__Features__*` der API folgen dem Wert der Umgebung. Der Smoke-Test der Pipeline liest bisher nur `features`; `sso` deshalb nicht je Umgebung abschalten, sonst erwartet er auf `api/me` weiter eine 401.
+- **Instanzen:** `maxInstances` begrenzt das Hochskalieren der Function (Flex Consumption erlaubt 1 bis 1000). Ohne Angabe gilt der Standard des Moduls `core`, 40.
+- Eine Umgebung ohne Eintrag unter `environments` nutzt die allgemeinen Angaben. Unbekannte Schlüssel dort, etwa der Tippfehler `maxInstance`, hält der Plan auf.
+
+Geänderte Settings ändern die Function App: Die Pipeline wartet auf die Infrastruktur-Freigabe, danach startet die Function neu. Lokal gelten sie nicht von selbst; `api/Api/local.settings.json` braucht sie unter `Values`. Plattform-Settings wie `WEBSITE_TIME_ZONE`, `TZ` oder `FUNCTIONS_WORKER_RUNTIME` gibt es auf Flex Consumption nicht; eine Zeitzone gehört deshalb in eine eigene Einstellung wie `Beispiel__Zeitzone`.
+
+**Keine Secrets in `settings`:** `project.yaml` liegt im Repo, im Build der API (sie liest daraus die Rollen) und im Terraform-Plan. API-Keys und Passwörter gehören in den Key Vault (Feature [`keyVault`](#keyvault-secrets-von-drittanbietern)): Den Wert setzt ein Mensch, die Function liest ihn als `Secrets__<Name>`.
 
 ## Monitoring
 
