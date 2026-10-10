@@ -24,6 +24,8 @@ Dünnes Template für Web-Apps aus Azure Static Web App (React) und Azure Functi
 
 Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infrastruktur ändert, wartet sie auf die Freigabe und wendet den Plan an. Danach deployt sie Function und Frontend und prüft beides per Smoke-Test.
 
+Änderungen an `main` laufen per Pull Request: `seed-scaffold` legt dafür eine Branch-Policy an, nach der der PR-Lauf derselben Pipeline grün sein muss. Er baut, testet, prüft `infra/` per `terraform validate` und sucht mit gitleaks nach Secrets in den Commits des PRs; er deployt nichts. Meldet der Secret-Scan einen falschen Alarm, kommt der Fingerprint aus dem Log in `.gitleaksignore`.
+
 ## Lokal entwickeln
 
 Voraussetzungen: .NET SDK 10, Node 24, Azure Functions Core Tools 4.
