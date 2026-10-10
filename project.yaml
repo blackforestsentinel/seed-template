@@ -2,9 +2,13 @@
 project: my-app
 
 features:
-  # Phase 2: Login per MSAL und Token-Prüfung in der Function
+  # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false
-  # Phase 2: Storage Account (Table, Blob) mit Managed-Identity-Zugriff
+  # Storage Account (Table, Blob) mit Managed-Identity-Zugriff (geplant)
   storage: false
-  # Phase 4: Custom Connector für die Power Platform, setzt sso voraus
+  # Custom Connector für die Power Platform, setzt sso voraus (Phase 4)
   customConnector: false
+
+hosting:
+  # Tarif der Static Web App: Free (höchstens 10 je Subscription) oder Standard
+  staticWebApp: Free
