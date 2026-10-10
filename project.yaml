@@ -16,3 +16,15 @@ hosting:
   # Eigene Domains der Static Web App, z. B. [app.example.org]. Die nötigen DNS-Einträge
   # stehen nach dem Apply im Terraform-Output custom_domain_dns_records.
   customDomains: []
+
+monitoring:
+  # Empfänger von Alarmen und Budget-Warnungen (Adresse oder Verteiler), z. B.
+  # [betrieb@example.org]. Ohne Empfänger gibt es keine Alarme und kein Budget.
+  recipients: []
+  # Monatsbudget der Resource Group je Umgebung in der Abrechnungswährung, z. B.
+  # { dev: 20, prod: 100 }. Warnung bei 80 % und wenn die Prognose den Betrag übersteigt.
+  budget: {}
+  # Alarm ab so vielen Exceptions in einer Stunde
+  exceptionsPerHour: 5
+  # Tageslimit für Logs in GB; danach nimmt Azure bis 0 Uhr UTC keine Telemetrie mehr an
+  dailyCapGb: 1
