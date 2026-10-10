@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { RuntimeConfig } from './config';
+import { createHttpClient, type RuntimeConfig } from '@blackforestsentinel/seed-web-core';
 
 export interface HealthReport {
   status: string;
@@ -12,17 +12,11 @@ export interface ApiClient {
   getHealth(): Promise<HealthReport>;
 }
 
-export function createApiClient(config: RuntimeConfig, fetchFn: typeof fetch = fetch): ApiClient {
-  async function get<T>(path: string): Promise<T> {
-    const response = await fetchFn(`${config.apiBaseUrl}${path}`);
-    if (!response.ok) {
-      throw new Error(`GET ${path} fehlgeschlagen (HTTP ${response.status})`);
-    }
-    return (await response.json()) as T;
-  }
+export function createApiClient(config: RuntimeConfig): ApiClient {
+  const http = createHttpClient({ baseUrl: config.apiBaseUrl });
 
   return {
-    getHealth: () => get<HealthReport>('/api/health'),
+    getHealth: () => http.get<HealthReport>('/api/health'),
   };
 }
 
