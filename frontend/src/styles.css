@@ -24,3 +24,10 @@ main {
   padding: 1.5rem;
   max-width: 60rem;
 }
+
+.account {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-left: auto;
+}
