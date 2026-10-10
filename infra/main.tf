@@ -9,6 +9,7 @@ module "core" {
   name                 = local.cfg.project
   environment          = var.environment
   location             = var.location
+  static_web_app_sku   = try(local.cfg.hosting.staticWebApp, "Free")
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
   app_settings         = merge({ Seed__Features__Sso = tostring(local.sso) }, [for m in module.sso : m.app_settings]...)
 }
