@@ -17,7 +17,7 @@ module "core" {
   static_web_app_sku   = local.static_web_app
   custom_domains       = local.custom_domains
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
-  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso) }, [for m in module.sso : m.app_settings]...)
+  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso) }, local.storage_app_settings, [for m in module.sso : m.app_settings]...)
 }
 
 module "sso" {
