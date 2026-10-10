@@ -71,23 +71,11 @@ Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Proj
 
 ### sso: Login mit Entra ID
 
-1. In `project.yaml` `sso: true` setzen.
-2. In der API das Paket einbinden und eine Zeile registrieren:
+In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 
-   ```bash
-   dotnet add api/Api package Bfs.Seed.Auth
-   ```
-
-   ```csharp
-   builder.AddSeedCore();
-   builder.UseSeedAuth();
-   ```
-
-3. Pushen.
-
-Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function. Ab dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`.
-
-Das Frontend braucht keine Änderung: Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Lokal trägt `public/config.json` dafür die Werte aus dem Terraform-Output `frontend_config` ein.
+- **Infrastruktur:** Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function (`Seed__Features__Sso`, `Auth__*`).
+- **API:** `Program.cs` schaltet `builder.UseSeedAuth()` über `Seed__Features__Sso` ein. Dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`. Fehlen bei eingeschaltetem sso die Auth-Settings, startet die App nicht.
+- **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Lokal trägt `public/config.json` dafür die Werte aus dem Terraform-Output `frontend_config` ein.
 
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
 

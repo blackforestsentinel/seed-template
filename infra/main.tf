@@ -4,17 +4,17 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.3.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.4.0"
 
   name                 = local.cfg.project
   environment          = var.environment
   location             = var.location
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
-  app_settings         = merge({}, [for m in module.sso : m.app_settings]...)
+  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso) }, [for m in module.sso : m.app_settings]...)
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.3.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.4.0"
   count  = local.sso ? 1 : 0
 
   name              = local.cfg.project
