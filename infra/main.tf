@@ -6,6 +6,18 @@ locals {
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
   frontend       = local.static_web_app != "None"
   custom_domains = try([for domain in local.cfg.hosting.customDomains : lower(domain)], [])
+
+  # App-Rollen aus auth.roles (nur mit sso in Gebrauch); die Capabilities je Rolle liest die API
+  # aus derselben Datei. Ohne Abschnitt keine Rollen.
+  app_roles = try({
+    for name, role in local.cfg.auth.roles : name => {
+      description          = try(role.description, null)
+      display_name         = try(role.displayName, null)
+      allowed_member_types = try(role.memberTypes, ["User"])
+    }
+  }, {})
+  # Vorhandene App-Registrierung für diese Umgebung, sonst legt sso sie an.
+  auth_existing = try(local.cfg.auth.existingRegistration[var.environment], null)
 }
 
 module "core" {
@@ -32,4 +44,16 @@ module "sso" {
     [for domain in local.custom_domains : "https://${domain}"],
     var.environment == "dev" ? ["http://localhost:5173"] : [],
   ) : []
+  # Bridge-Seite frontend/redirect.html für die stille Anmeldung im iframe.
+  spa_redirect_bridge_path = local.frontend ? "/redirect.html" : null
+
+  app_roles           = local.app_roles
+  assignment_required = try(local.cfg.auth.assignmentRequired, false)
+  existing_registration = local.auth_existing == null ? null : {
+    tenant_id     = local.auth_existing.tenantId
+    api_client_id = local.auth_existing.apiClientId
+    spa_client_id = try(local.auth_existing.spaClientId, null)
+    api_scope     = local.auth_existing.apiScope
+    audience      = try(local.auth_existing.audience, null)
+  }
 }
