@@ -3,7 +3,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.1.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.2.0"
 
   name                 = local.cfg.project
   environment          = var.environment
