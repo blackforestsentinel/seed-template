@@ -14,8 +14,10 @@
     <PackageReference Include="Bfs.Seed.Auth" Version="0.2.1" />
     <PackageReference Include="Bfs.Seed.Functions.Core" Version="0.2.1" />
     <PackageReference Include="Bfs.Seed.Mcp" Version="0.3.0" />
+    <PackageReference Include="Bfs.Seed.Storage" Version="0.2.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.4" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
   </ItemGroup>
 

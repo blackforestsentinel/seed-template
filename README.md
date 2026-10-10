@@ -48,9 +48,11 @@ Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
 Wer lokal gegen Entra ID testen will, entfernt `Auth__Mode`, trägt die Werte aus dem Terraform-Output der Umgebung `dev` ein (`Auth__TenantId`, `Auth__ClientId`, `Auth__Audience` in `local.settings.json`, `frontend_config` in `public/config.json`); `http://localhost:5173/` ist in `dev` als Redirect-URI eingetragen.
 
+Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) als Ersatz für den Storage Account, siehe [storage](#storage-datenhaltung-mit-table-blob-und-queue).
+
 ## Bausteine im Code
 
-- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu, mit dem Feature `storage` kommen `builder.AddSeedStorage()` aus `Bfs.Seed.Storage` und das Beispiel in `api/Api/Jobs` dazu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
 - **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
@@ -232,7 +234,44 @@ Nach rund 15 Sekunden meldet `/api/health` wieder `status: "ok"`. Ohne den letzt
 
 Ein Name, der aus `keyVault.secrets` verschwindet, verliert nur sein App-Setting; das Secret bleibt im Vault, bis jemand es mit `az keyvault secret delete` löscht. Details zu Rechten, Soft Delete und Wiederherstellung stehen in der README des Moduls [`keyvault`](https://github.com/blackforestsentinel/seed-terraform/tree/main/keyvault).
 
-`storage` und `customConnector` folgen.
+`customConnector` folgt mit Phase 4.
+
+### storage: Datenhaltung mit Table, Blob und Queue
+
+In `project.yaml` `storage: true` setzen, unter `storage:` Tabellen, Queues und Container eintragen und pushen:
+
+```yaml
+features:
+  storage: true
+
+storage:
+  tables: [jobs]
+  queues: [jobs]
+  containers: [uploads]
+  lifecycle:                  # optional, z. B. Löschfristen
+    - name: uploads-90-tage
+      prefixes: [uploads/]
+      deleteAfterDays: 90
+```
+
+- **Infrastruktur:** Terraform (`infra/storage.tf`, Modul `storage` aus seed-terraform) legt einen eigenen Storage Account an, getrennt vom Host-Storage der Function: ohne Shared Key, TLS 1.2, ohne öffentlichen Blob-Zugriff. Die Managed Identity der Function bekommt Blob, Queue und Table Data Contributor. Versionierung und Soft Delete sind an; `retention:` und `lifecycle:` in `project.yaml` steuern Aufbewahrung und Löschfristen (kommentiertes Beispiel dort). Die App-Settings `Seed__Features__Storage` und `SeedStorage__*` beschreiben die Verbindung `SeedStorage` per Managed Identity.
+- **API:** `Program.cs` schaltet `builder.AddSeedStorage()` über `Seed__Features__Storage` ein. Dann gibt es Clients für Table, Blob und Queue, `ISeedTableRepository<T>` mit ETag und `ISeedQueueSender`; Queue-Trigger nutzen `Connection = "SeedStorage"`. Details in der README von [`Bfs.Seed.Storage`](https://github.com/blackforestsentinel/seed-packages/tree/main/dotnet/src/Bfs.Seed.Storage).
+- **Beispiel `api/Api/Jobs`:** `POST /api/jobs` legt einen Job-Status in der Tabelle `jobs` an und stellt eine Nachricht in die Queue `jobs`; die Queue-Function `ProcessJob` verarbeitet ihn und schreibt Status und Ergebnis zurück; `GET /api/jobs/{id}` liest den Status. Mit `sso` gehört jeder Job der angemeldeten Person (PartitionKey = `oid`), andere finden ihn nicht. Ohne `storage` schaltet `infra/storage.tf` die drei Functions per `AzureWebJobs.<Name>.Disabled` ab und setzt einen Platzhalter für die Verbindung, weil der Host einen Queue-Trigger auch abgeschaltet indiziert und ohne Verbindung bei jedem Start einen Fehler meldet. Wer das Beispiel löscht oder umbenennt, passt die Liste `storage_example_functions` dort an.
+
+**Fehler und Poison-Queue:** Wirft eine Queue-Function, stellt die Queue die Nachricht nach 30 Sekunden erneut zu (`host.json`: `visibilityTimeout`), höchstens fünfmal (`maxDequeueCount`). Danach verschiebt der Host sie in `<queue>-poison` (hier `jobs-poison`), die er selbst anlegt. Dort verarbeitet sie niemand; nach 7 Tagen verfällt sie. Nachrichten kommen mindestens einmal an, die Verarbeitung muss also wiederholbar sein; das Beispiel prüft dafür den Status in der Tabelle.
+
+**Vorsicht beim Entfernen:** Fällt eine Tabelle, Queue oder ein Container aus `project.yaml` heraus oder wird `storage` wieder `false`, löscht der nächste Apply sie samt Inhalt. Container bleiben 7 Tage wiederherstellbar, Tabellen und Queues nicht. Vor der Infrastruktur-Freigabe den Plan auf `destroy` prüfen. Ein Backup gehört noch nicht zum Baustein.
+
+**Lokal mit Azurite:** `local.settings.sample.json` enthält `SeedStorage = UseDevelopmentStorage=true`; lokal legt das Paket Tabellen, Queues und Container beim ersten Zugriff an.
+
+```bash
+npm install -g azurite
+azurite --inMemoryPersistence --skipApiVersionCheck   # eigenes Terminal
+```
+
+In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` entfernen. `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
+
+`customConnector` folgt.
 
 ## Monitoring
 
