@@ -6,6 +6,7 @@
     "Seed__Project": "my-app",
     "Seed__Environment": "local",
     "Seed__Features__Sso": "false",
+    "Seed__Features__Mcp": "false",
     "Auth__Mode": "Local",
     "Auth__LocalUser__Roles__0": "Admin"
   },
