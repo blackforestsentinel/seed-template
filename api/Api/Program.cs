@@ -1,5 +1,6 @@
 using Bfs.Seed.Auth;
 using Bfs.Seed.Functions.Core;
+using Bfs.Seed.Mcp;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -14,6 +15,15 @@ builder.AddSeedCore();
 if (builder.Configuration.GetValue<bool>("Seed:Features:Sso"))
 {
     builder.UseSeedAuth();
+}
+
+// Feature mcp aus project.yaml (setzt sso voraus): MCP-Endpunkt /api/mcp für Claude, VS Code
+// und andere KI-Werkzeuge. Werkzeuge sind Klassen mit [McpServerToolType], hier in Mcp/.
+if (builder.Configuration.GetValue<bool>("Seed:Features:Mcp"))
+{
+    builder.AddSeedMcp()
+        .WithToolsFromAssembly(typeof(Program).Assembly)
+        .WithInstructions("Rufe zuerst ueberblick_abrufen auf: Es nennt die anfragende Person und ihre Berechtigungen.");
 }
 
 builder.Build().Run();

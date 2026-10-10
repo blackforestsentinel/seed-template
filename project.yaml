@@ -4,6 +4,8 @@ project: my-app
 features:
   # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false
+  # MCP-Server unter /api/mcp für Claude, VS Code und andere KI-Werkzeuge, setzt sso voraus
+  mcp: false
   # Storage Account (Table, Blob) mit Managed-Identity-Zugriff (geplant)
   storage: false
   # Custom Connector für die Power Platform, setzt sso voraus (Phase 4)
@@ -26,7 +28,7 @@ auth:
       description: Verwaltet die Anwendung
       # User (Personen und Gruppen), Application (Dienste ohne angemeldete Person) oder beide
       memberTypes: [User]
-      capabilities: [settings.manage]
+      capabilities: [settings.manage, status.read]
   # Zuweisung erforderlich: Nur Personen und Anwendungen mit einer Rolle bekommen ein Token.
   assignmentRequired: false
   # Vorhandene App-Registrierung je Umgebung statt neuer, auch aus einem anderen Tenant.
@@ -37,3 +39,11 @@ auth:
   #     apiClientId: 00000000-0000-0000-0000-000000000000
   #     spaClientId: 00000000-0000-0000-0000-000000000000
   #     apiScope: api://00000000-0000-0000-0000-000000000000/access_as_user
+
+# Nur mit features.mcp, alles optional:
+# mcp:
+#   # Eigene, im Tenant verifizierte Domain der Function. Claude und Claude Code brauchen sie,
+#   # VS Code nicht. DNS, Bindung und Zertifikat: README, Abschnitt mcp.
+#   customDomain: mcp.example.org
+#   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
+#   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]

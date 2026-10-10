@@ -1,6 +1,7 @@
 locals {
   cfg = yamldecode(file("${path.root}/../project.yaml"))
   sso = try(local.cfg.features.sso, false)
+  mcp = try(local.cfg.features.mcp, false)
 
   # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API).
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
@@ -29,7 +30,7 @@ module "core" {
   static_web_app_sku   = local.static_web_app
   custom_domains       = local.custom_domains
   cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
-  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso) }, [for m in module.sso : m.app_settings]...)
+  app_settings         = merge({ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }, [for m in module.sso : m.app_settings]...)
 }
 
 module "sso" {
@@ -56,4 +57,10 @@ module "sso" {
     api_scope     = local.auth_existing.apiScope
     audience      = try(local.auth_existing.audience, null)
   }
+
+  # MCP-Server (setzt sso voraus): Scope mcp_access, Client-Registrierung für MCP-Clients und
+  # mit eigener Domain deren Adresse als Application ID URI.
+  mcp               = local.mcp
+  mcp_custom_domain = try(lower(local.cfg.mcp.customDomain), null)
+  mcp_redirect_uris = try(local.cfg.mcp.redirectUris, null)
 }
