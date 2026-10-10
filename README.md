@@ -230,7 +230,7 @@ read -rs VALUE && az keyvault secret set --vault-name $KV --name stripe-key --va
 az rest --method post --url "https://management.azure.com$(az functionapp show --name $FUNC --resource-group $RG   --query id -o tsv)/config/configreferences/appsettings/refresh?api-version=2022-03-01"
 ```
 
-Nach rund 15 Sekunden meldet `/api/health` wieder `status: "ok"`. Ohne den letzten Befehl übernimmt die Function den Wert beim nächsten Deploy, also beim nächsten Pipeline-Lauf, spätestens aber nach 24 Stunden. `az functionapp restart` reicht auf Flex Consumption nicht. Terraform überschreibt gesetzte Werte nicht wieder mit dem Platzhalter.
+Nach rund 15 Sekunden meldet `/api/health` wieder `status: "ok"`. Direkt nach dem Setzen greift der Refresh manchmal noch nicht (in seed-demo beim ersten Versuch); steht nach einer Minute noch der Platzhalter da, den letzten Befehl wiederholen. Ohne den letzten Befehl übernimmt die Function den Wert beim nächsten Deploy, also beim nächsten Pipeline-Lauf, spätestens aber nach 24 Stunden. `az functionapp restart` reicht auf Flex Consumption nicht. Terraform überschreibt gesetzte Werte nicht wieder mit dem Platzhalter.
 
 Ein Name, der aus `keyVault.secrets` verschwindet, verliert nur sein App-Setting; das Secret bleibt im Vault, bis jemand es mit `az keyvault secret delete` löscht. Details zu Rechten, Soft Delete und Wiederherstellung stehen in der README des Moduls [`keyvault`](https://github.com/blackforestsentinel/seed-terraform/tree/main/keyvault).
 
