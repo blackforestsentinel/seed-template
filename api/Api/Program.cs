@@ -1,6 +1,8 @@
+using Api.Jobs;
 using Bfs.Seed.Auth;
 using Bfs.Seed.Functions.Core;
 using Bfs.Seed.Mcp;
+using Bfs.Seed.Storage;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +30,14 @@ if (builder.Configuration.GetValue<bool>("Seed:Features:Mcp"))
     builder.AddSeedMcp()
         .WithToolsFromAssembly(typeof(Program).Assembly)
         .WithInstructions("Rufe zuerst ueberblick_abrufen auf: Es nennt die anfragende Person und ihre Berechtigungen.");
+}
+
+// Feature storage aus project.yaml: Terraform setzt Seed__Features__Storage und die Verbindung
+// SeedStorage. Dann gibt es die Clients für Table, Blob und Queue; Beispiel in Jobs/.
+if (builder.Configuration.GetValue<bool>("Seed:Features:Storage"))
+{
+    builder.AddSeedStorage();
+    builder.Services.AddSeedTable<JobStatus>(JobStatus.TableName);
 }
 
 builder.Build().Run();

@@ -37,6 +37,7 @@ module "core" {
   # Je Feature das Flag und die App-Settings des Moduls.
   app_settings = merge(concat(
     [{ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }],
+    [local.storage_app_settings],
     [for m in module.sso : m.app_settings],
     [{ Seed__Features__KeyVault = tostring(local.key_vault) }],
     [for m in module.keyvault : m.app_settings],
