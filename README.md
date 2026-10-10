@@ -44,7 +44,7 @@ Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
 ## Bausteine im Code
 
-- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`.
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights und die Seed-Optionen ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API.
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
@@ -62,6 +62,73 @@ In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 - **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Lokal trägt `public/config.json` dafür die Werte aus dem Terraform-Output `frontend_config` ein.
 
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
+
+### mcp: MCP-Server für KI-Werkzeuge
+
+Stellt unter `/api/mcp` einen MCP-Server bereit, über den Claude, VS Code und andere KI-Werkzeuge im Namen der angemeldeten Person Werkzeuge der API aufrufen. Setzt `sso` voraus; ohne `sso` scheitert schon der Plan.
+
+In `project.yaml` `mcp: true` setzen und pushen:
+
+- **Infrastruktur:** Das Modul `sso` legt den Scope `mcp_access` an der API an, eine öffentliche Client-Registrierung `<projekt>-<umgebung>-mcp` für Claude und Claude Code und autorisiert beide sowie VS Code für `mcp_access` vor. `mcp_access` gilt nur für den MCP-Endpunkt: Ein Token, das ein KI-Werkzeug bekommt, erreicht die übrige API nicht.
+- **API:** `Program.cs` schaltet `builder.AddSeedMcp()` über `Seed__Features__Mcp` ein. Der Endpunkt arbeitet zustandslos (Streamable HTTP), passt also zu Flex Consumption mit beliebig vielen Instanzen. Die Metadaten nach RFC 9728 liegen unter `/api/.well-known/oauth-protected-resource`; jede 401-Antwort verweist darauf, so finden Clients Entra als Anmeldeserver.
+- **Werkzeuge:** Klassen mit `[McpServerToolType]` in `api/Api/Mcp/`, Methoden mit `[McpServerTool]` und `[Description]` (Beispiel: `BeispielTools.cs`). Argumente prüft der Endpunkt gegen das Schema, das aus den Parametern entsteht; unbekannte Argumente lehnt er ab, statt sie zu ignorieren. Ein Parameter `ClaimsPrincipal` liefert die angemeldete Person, weitere Parameter und der Konstruktor bekommen Dienste aus der Dependency Injection.
+- **Berechtigungen:** `[RequireCapability("…")]` an Methode oder Klasse. Ein Werkzeug erscheint in `tools/list` nur, wenn die Person alle verlangten Capabilities hat; ein Aufruf ohne sie liefert eine Fehlermeldung mit der fehlenden Berechtigung. Capabilities folgen aus App-Rollen (siehe `sso`).
+
+Nach dem ersten Apply einmal je Umgebung im Entra Admin Center an der Registrierung `<projekt>-<umgebung>-mcp` unter **API-Berechtigungen** die **Administratorzustimmung erteilen**. Sie deckt `offline_access` ab, also das Refresh-Token; ohne sie sehen Personen einen Einwilligungsdialog oder „Administratorgenehmigung erforderlich“. Die Terraform-Outputs `mcp_url` und `mcp_client_id` stehen am Ende des Apply-Logs.
+
+#### Eigene Domain für Claude
+
+Claude und Claude Code senden die MCP-Adresse bei der Anmeldung als `resource` (RFC 8707). Entra stellt nur dann ein Token aus, wenn diese Adresse als Application ID URI an der API-Registrierung steht, und lässt dort nur Domains zu, die im Tenant verifiziert sind. Über den Standardnamen `func-….azurewebsites.net` scheitert die Anmeldung deshalb nach dem Login mit `AADSTS9010010`. VS Code meldet sich ohne `resource` an und braucht keine eigene Domain.
+
+1. Die Domain (oder eine übergeordnete, etwa `example.org` für `mcp.example.org`) muss im Tenant verifiziert sein: Entra Admin Center → Einstellungen → Domänennamen.
+2. In `project.yaml` eintragen und pushen; der Plan zeigt eine neue Application ID URI und das App-Setting `Mcp__Resource`:
+
+   ```yaml
+   mcp:
+     customDomain: mcp.example.org
+   ```
+
+3. DNS beim Anbieter der Zone: CNAME `mcp.example.org` auf den Host aus `function_app_url`, TXT `asuid.mcp.example.org` mit der Prüfkennung aus `az functionapp show -g <resource_group_name> -n <function_app_name> --query customDomainVerificationId -o tsv`.
+4. Domain an die Function binden und ein verwaltetes Zertifikat ausstellen:
+
+   ```bash
+   az functionapp config hostname add -g <resource_group_name> -n <function_app_name> --hostname mcp.example.org
+   az functionapp config ssl create -g <resource_group_name> -n <function_app_name> --hostname mcp.example.org
+   ```
+
+   Danach muss die Domain im Portal unter **Benutzerdefinierte Domänen** als gesichert (SNI SSL) erscheinen. Prüfen: `curl -i -X POST https://mcp.example.org/api/mcp` liefert `401` ohne TLS-Fehler.
+
+DNS, Bindung und Zertifikat liegen bewusst nicht in Terraform: Die Bindung verlangt die DNS-Einträge schon beim Apply, und die Zone liegt meist nicht in Azure. Wird die Function App neu angelegt, die Schritte 3 und 4 wiederholen.
+
+#### Verbinden mit Claude und VS Code
+
+Werte aus den Terraform-Outputs: `mcp_url` (mit eigener Domain deren Adresse, sonst die der Function) und `mcp_client_id`. Die Adresse genau so eintragen: Kleinbuchstaben, mit `/api/mcp`, ohne Schrägstrich am Ende.
+
+**VS Code** (funktioniert auch ohne eigene Domain): in `.vscode/mcp.json`
+
+```json
+{
+  "servers": {
+    "my-app": { "type": "http", "url": "https://func-my-app-dev-abc123.azurewebsites.net/api/mcp" }
+  }
+}
+```
+
+Dann **MCP: List Servers** → Server starten → mit Microsoft anmelden. VS Code nutzt seine eigene Entra-Registrierung, die vorautorisiert ist; eine Client-ID braucht es nicht. Lokal geht das genauso gegen `http://localhost:7071/api/mcp`, wenn `local.settings.json` `Seed__Features__Sso`, `Seed__Features__Mcp` und die `Auth__*`-Werte der dev-Umgebung setzt.
+
+**Claude** (claude.ai, Desktop, Mobil; braucht die eigene Domain): In Team- und Enterprise-Organisationen legt ein Owner den Connector einmal an (**Organization settings → Connectors → Add → Custom**), Mitglieder verbinden sich danach unter **Customize → Connectors** selbst; mit Pro oder Max **Customize → Connectors → Add custom connector**. Name frei, URL = `mcp_url`, unter **Advanced settings** OAuth Client ID = `mcp_client_id`, OAuth Client Secret **leer** lassen; Claude meldet sich dann als öffentlicher Client mit PKCE an. Die Anmeldedaten lassen sich später nicht ändern; für eine andere Client-ID den Connector entfernen und neu anlegen.
+
+**Claude Code** (braucht die eigene Domain):
+
+```bash
+claude mcp add --transport http --client-id <mcp_client_id> --callback-port 8080 my-app https://mcp.example.org/api/mcp
+```
+
+Danach in Claude Code `/mcp` → Server wählen → **Authenticate**. Der Port ist frei wählbar, Entra ignoriert ihn bei `http://localhost/callback`.
+
+**Andere Clients:** Jeder Client, der mit einem eigenen Entra-Token für die API und `mcp_access` kommt, wird angenommen; eine Liste zugelassener Clients gibt es nicht. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
+
+**Fehlerbilder:** `AADSTS9010010` nach der Anmeldung: eigene Domain fehlt oder die URL im Client weicht von `mcp_url` ab. Einwilligungsdialog oder `AADSTS65001`: Administratorzustimmung fehlt. Werkzeug fehlt in der Liste: Der Person fehlt die Capability (Werkzeug `ueberblick_abrufen` zeigt Rollen und Berechtigungen). Conditional Access mit Standortbedingung: Claude holt und erneuert Tokens von Anthropics Adressen (`160.79.104.0/21`), nicht vom Rechner der Person.
 
 `storage` und `customConnector` folgen.
 
