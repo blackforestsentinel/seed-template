@@ -10,6 +10,10 @@ terraform {
       source  = "Azure/azapi"
       version = "2.13.0"
     }
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "3.10.0"
+    }
   }
 
   # Die Pipeline setzt Storage Account, Container und Key per -backend-config.
@@ -22,3 +26,6 @@ provider "azurerm" {
 }
 
 provider "azapi" {}
+
+# Nur mit Feature sso in Gebrauch (App-Registrierungen).
+provider "azuread" {}

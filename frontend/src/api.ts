@@ -12,8 +12,9 @@ export interface ApiClient {
   getHealth(): Promise<HealthReport>;
 }
 
-export function createApiClient(config: RuntimeConfig): ApiClient {
-  const http = createHttpClient({ baseUrl: config.apiBaseUrl });
+/** getAccessToken kommt aus der Anmeldung (Feature sso) und hängt ein Bearer-Token an. */
+export function createApiClient(config: RuntimeConfig, getAccessToken?: () => Promise<string>): ApiClient {
+  const http = createHttpClient({ baseUrl: config.apiBaseUrl, getAccessToken });
 
   return {
     getHealth: () => http.get<HealthReport>('/api/health'),
