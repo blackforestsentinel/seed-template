@@ -5,7 +5,8 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "Seed__Project": "my-app",
     "Seed__Environment": "local",
-    "Seed__Features__Sso": "false"
+    "Seed__Features__Sso": "false",
+    "Seed__Features__Mcp": "false"
   },
   "Host": {
     "CORS": "http://localhost:5173"

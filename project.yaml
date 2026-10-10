@@ -4,6 +4,8 @@ project: my-app
 features:
   # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false
+  # MCP-Server unter /api/mcp für Claude, VS Code und andere KI-Werkzeuge, setzt sso voraus
+  mcp: false
   # Storage Account (Table, Blob) mit Managed-Identity-Zugriff (geplant)
   storage: false
   # Custom Connector für die Power Platform, setzt sso voraus (Phase 4)
@@ -16,3 +18,11 @@ hosting:
   # Eigene Domains der Static Web App, z. B. [app.example.org]. Die nötigen DNS-Einträge
   # stehen nach dem Apply im Terraform-Output custom_domain_dns_records.
   customDomains: []
+
+# Nur mit features.mcp, alles optional:
+# mcp:
+#   # Eigene, im Tenant verifizierte Domain der Function. Claude und Claude Code brauchen sie,
+#   # VS Code nicht. DNS, Bindung und Zertifikat: README, Abschnitt mcp.
+#   customDomain: mcp.example.org
+#   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
+#   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]
