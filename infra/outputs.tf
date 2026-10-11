@@ -15,7 +15,17 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.env_unknown) == 0
-    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings und auth.directory."
+    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings, hosting, mcp und auth.directory."
+  }
+
+  precondition {
+    condition     = length(local.env_hosting_unknown) == 0
+    error_message = "environments.${var.environment}.hosting in project.yaml: ${join(", ", local.env_hosting_unknown)} geht nicht je Umgebung; erlaubt sind customDomains und corsAllowedOrigins."
+  }
+
+  precondition {
+    condition     = length(local.cors_invalid) == 0
+    error_message = "hosting.corsAllowedOrigins in project.yaml: ${join(", ", local.cors_invalid)} ist kein Origin. Erwartet wird https://<host> (oder http://) mit optionalem Port und ohne Pfad, etwa https://www.example.org."
   }
 }
 
