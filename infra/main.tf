@@ -2,8 +2,11 @@ locals {
   cfg = yamldecode(file("${path.root}/../project.yaml"))
   # Abweichungen dieser Umgebung aus environments.<name>; ohne Eintrag gelten die allgemeinen
   # Angaben. Unbekannte Schlüssel (Tippfehler) hält die Prüfung am Output function_app_name auf.
-  env         = try(local.cfg.environments[var.environment], {})
-  env_unknown = setsubtract(try(keys(local.env), []), ["features", "maxInstances", "settings"])
+  env = try(local.cfg.environments[var.environment], {})
+  env_unknown = setunion(
+    setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings"]),
+    [for key in setsubtract(try(keys(local.env.auth), []), ["directory"]) : "auth.${key}"],
+  )
   # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
   features = merge(try(local.cfg.features, {}), try(local.env.features, {}))
   sso      = try(local.features.sso, false)
@@ -25,6 +28,12 @@ locals {
   }, {})
   # Vorhandene App-Registrierung für diese Umgebung, sonst legt sso sie an.
   auth_existing = try(local.cfg.auth.existingRegistration[var.environment], null)
+  # Personen-Komponenten im Frontend (nur mit sso und Frontend in Gebrauch): auth.directory,
+  # einzelne Schalter überschrieben aus environments.<name>.auth.directory, etwa aus in einer
+  # Umgebung, deren Tenant noch nicht zugestimmt hat. Kein Objekt oder unbekannte Schlüssel hält
+  # die Prüfung am Output frontend_config auf.
+  directory         = try(merge(try(local.cfg.auth.directory, {}), try(local.env.auth.directory, {})), null)
+  directory_unknown = try(setsubtract(keys(local.directory), ["enabled", "presence", "roleFilter"]), [])
   # Ohne Empfänger keine Alarme und kein Budget; das Tageslimit für Logs gilt immer. Eine
   # einzelne Adresse statt einer Liste ist auch erlaubt.
   alert_recipients = compact(flatten([try(local.cfg.monitoring.recipients, [])]))
@@ -85,6 +94,14 @@ module "sso" {
     spa_client_id = try(local.auth_existing.spaClientId, null)
     api_scope     = local.auth_existing.apiScope
     audience      = try(local.auth_existing.audience, null)
+  }
+
+  # Personen-Komponenten (seed-web-people): delegierte Graph-Berechtigungen an der SPA und
+  # auth.directory in config.json. Die Zustimmung erteilt ein Admin von Hand (README).
+  directory = {
+    enabled     = try(local.directory.enabled, false)
+    presence    = try(local.directory.presence, false)
+    role_filter = try(local.directory.roleFilter, false)
   }
 
   # MCP-Server (setzt sso voraus): Scope mcp_access, Client-Registrierung für MCP-Clients und
