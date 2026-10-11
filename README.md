@@ -134,6 +134,8 @@ Claude und Claude Code senden die MCP-Adresse bei der Anmeldung als `resource` (
      customDomain: mcp.example.org
    ```
 
+   Mit mehreren Umgebungen braucht jede ihre eigene Domain; dann `environments.<name>.mcp.customDomain` statt `mcp.customDomain` (siehe [Einstellungen je Umgebung](#einstellungen-je-umgebung)).
+
 3. DNS beim Anbieter der Zone: CNAME `mcp.example.org` auf den Host aus `function_app_url`, TXT `asuid.mcp.example.org` mit der Prüfkennung aus `az functionapp show -g <resource_group_name> -n <function_app_name> --query customDomainVerificationId -o tsv`.
 4. Domain an die Function binden und ein verwaltetes Zertifikat ausstellen:
 
@@ -292,12 +294,18 @@ environments:
       Beispiel__Mocks: "true"
   prod:
     maxInstances: 4
+    hosting:                        # ersetzt customDomains bzw. corsAllowedOrigins aus hosting
+      customDomains: [app.example.org]
+    mcp:                            # ersetzt einzelne Angaben aus mcp
+      customDomain: mcp.example.org
 ```
 
 - **App-Settings:** Terraform setzt `settings` und `environments.<name>.settings` als App-Settings der Function; bei gleichem Namen gilt der Wert der Umgebung. Im Code liest `IConfiguration` sie wie jede andere Einstellung, `Beispiel__Zeitzone` als `Beispiel:Zeitzone`. Seed-eigene Settings gehen bei gleichem Namen vor: die der Features (`Seed__*`, `Auth__*`, `SeedStorage__*`, `Secrets__*`, `Mcp__*`) und die Grundeinstellungen der Function (`AzureWebJobsStorage__*`, `APPLICATIONINSIGHTS_*`, `AZURE_CLIENT_ID`).
 - **Werte sind Text.** Zahlen und `true`/`false` nimmt Terraform als Text an, aber YAML liest manches anders, als es dasteht: `007` wird `7`, `1.50` wird `1.5`, `on` und `yes` werden `true`. Solche Werte in Anführungszeichen setzen. Listen, Objekte und leere Werte (für leer `""` schreiben) hält der Plan mit einer Meldung auf.
 - **Features:** `environments.<name>.features` überschreibt einzelne Schalter aus `features`, etwa ohne Key Vault in `test`. Terraform und die Flags `Seed__Features__*` der API folgen dem Wert der Umgebung. Der Smoke-Test der Pipeline liest bisher nur `features`; `sso` deshalb nicht je Umgebung abschalten, sonst erwartet er auf `api/me` weiter eine 401.
 - **Instanzen:** `maxInstances` begrenzt das Hochskalieren der Function (Flex Consumption erlaubt 1 bis 1000). Ohne Angabe gilt der Standard des Moduls `core`, 40.
+- **Domains und CORS:** `environments.<name>.hosting` ersetzt `customDomains` und `corsAllowedOrigins` aus `hosting`. Eine eigene Domain gehört zu genau einer Static Web App; steht sie unter `hosting`, versucht jede Umgebung, sie an ihre eigene zu hängen. Deshalb gehört sie meist unter die Umgebung, die sie bekommt. Tarif (`staticWebApp`) gilt für alle Umgebungen.
+- **MCP:** `environments.<name>.mcp` ersetzt einzelne Angaben aus `mcp`, etwa `customDomain`, denn auch die eigene Domain der Function gibt es nur einmal.
 - Eine Umgebung ohne Eintrag unter `environments` nutzt die allgemeinen Angaben. Unbekannte Schlüssel dort, etwa der Tippfehler `maxInstance`, hält der Plan auf.
 
 Geänderte Settings ändern die Function App: Die Pipeline wartet auf die Infrastruktur-Freigabe, danach startet die Function neu. Lokal gelten sie nicht von selbst; `api/Api/local.settings.json` braucht sie unter `Values`. Plattform-Settings wie `WEBSITE_TIME_ZONE`, `TZ` oder `FUNCTIONS_WORKER_RUNTIME` gibt es auf Flex Consumption nicht; eine Zeitzone gehört deshalb in eine eigene Einstellung wie `Beispiel__Zeitzone`.
@@ -349,6 +357,31 @@ hosting:
 3. Azure prüft den TXT-Eintrag selbst und stellt ein Zertifikat aus; das dauert Minuten bis einige Stunden. Danach ist die Domain bereit und die Warnung im Deploy verschwindet.
 
 Der Apply wartet nicht auf das DNS, die Einträge dürfen also auch erst danach gesetzt werden. Free erlaubt 2, Standard 5 eigene Domains. Läuft die Validierung ab (Status `Failed`), die Domain austragen, Pipeline laufen lassen und wieder eintragen.
+
+Unter `hosting` gilt die Domain für alle Umgebungen. Soll sie nur an eine, etwa prod, gehört sie dorthin (siehe [Einstellungen je Umgebung](#einstellungen-je-umgebung)):
+
+```yaml
+environments:
+  prod:
+    hosting:
+      customDomains: [app.example.org]
+```
+
+**Umzug einer Domain** von einer anderen Static Web App, etwa bei einer Migration: Eine Domain hängt immer nur an einer Static Web App. Erst an der alten entfernen, dann eintragen und pushen; den TXT-Eintrag für die neue Validierung setzen und den CNAME auf die neue Static Web App umstellen. Bis Azure die Domain validiert und das Zertifikat ausgestellt hat, antwortet sie nicht.
+
+### CORS für weitere Websites
+
+Die Function erlaubt Aufrufe aus dem Browser nur vom eigenen Frontend: der Static Web App, ihren eigenen Domains und in `dev` dem lokalen Vite-Server. Ruft eine andere Website eine Route direkt aus dem Browser auf, etwa ein eingebettetes Widget auf der Firmen-Website, kommt deren Origin dazu:
+
+```yaml
+hosting:
+  corsAllowedOrigins: [https://www.example.org, https://example.org]
+```
+
+- **Origins**, nicht URLs: Schema, Host und optional Port, ohne Pfad und ohne Schrägstrich am Ende. `*` gibt es nicht; der Smoke-Test der Pipeline prüft, dass ein fremder Origin abgelehnt wird.
+- **Je Umgebung** unter `environments.<name>.hosting.corsAllowedOrigins`; die Liste dort ersetzt die allgemeine.
+- **CORS ist kein Zugriffsschutz.** Es regelt nur, ob ein Browser die Antwort an das Skript der fremden Seite weitergibt. Was eine Route ohne Token preisgibt, schützt `[AllowAnonymous]` bzw. dessen Fehlen, nicht CORS.
+- Die Function bekommt eine geänderte Liste mit dem nächsten Apply, also nach der Infrastruktur-Freigabe.
 
 ### Projekt ohne Frontend (nur API)
 
