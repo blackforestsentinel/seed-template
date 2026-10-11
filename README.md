@@ -109,6 +109,47 @@ auth:
 
 Terraform legt dann für diese Umgebung keine Registrierungen an; API und Frontend melden sich im angegebenen Tenant an. Was der Admin dort einrichten muss (Redirect-URIs samt Bridge-Seite, Vorautorisierung der SPA, App-Rollen gemäß `auth.roles`, Zuweisungen), steht in der README von [seed-terraform](https://github.com/blackforestsentinel/seed-terraform) beim Modul `sso`.
 
+#### Personen und Profilbilder
+
+Für die Personen-Komponenten aus [`@blackforestsentinel/seed-web-people`](https://github.com/blackforestsentinel/seed-packages) (Profilbild, Benutzermenü, Personenauswahl, Teams-Status): Das Frontend lädt Fotos, Profile und Suchergebnisse mit dem Token der angemeldeten Person direkt aus Microsoft Graph. Die API ist nicht beteiligt, Fotos und Profildaten gehen nie an sie. In `project.yaml`:
+
+```yaml
+auth:
+  directory:
+    enabled: true       # Fotos, Profile, Suche
+    presence: true      # Teams-Status
+    roleFilter: false   # Personenauswahl nur mit App-Rolle (Administratorzustimmung nötig)
+```
+
+- **Infrastruktur:** Terraform trägt an der App-Registrierung des Frontends (`<projekt>-<umgebung>-web`) delegierte Berechtigungen für Microsoft Graph ein; der Plan zeigt dafür eine Änderung an der Registrierung und wartet auf die Infrastruktur-Freigabe. `config.json` bekommt unter `auth` den Teil `directory` mit den Scopes und der Client-ID der API.
+- **CSP:** `connect-src` in `frontend/public/staticwebapp.config.json` erlaubt `https://graph.microsoft.com`. Profilbilder kommen als `data:`-URL, die `img-src` schon zulässt; sonst ist an der CSP nichts gelockert.
+- **Rolle im Menü:** `GET /api/me` liefert neben `roles` auch `roleDetails` mit dem Anzeigenamen aus `auth.roles.<Rolle>.displayName` („Administrator“ statt `Admin`), ab der nächsten Version von `Bfs.Seed.Auth`.
+
+| Schalter | Berechtigung (delegiert) | Wofür | Zustimmung |
+| --- | --- | --- | --- |
+| `enabled` | `User.Read`, `User.ReadBasic.All`, `People.Read` | eigenes Profil, andere Personen und ihre Fotos, Suche, relevante Personen | Personen selbst, soweit der Tenant es zulässt, sonst Admin |
+| `presence` | `Presence.Read.All` | Teams-Status | wie oben |
+| `roleFilter` | `Application.Read.All`, `GroupMember.Read.All` | wer der API über eine App-Rolle zugewiesen ist, auch über Gruppen | immer Admin |
+
+Delegiert heißt: Das Frontend sieht nur, was die angemeldete Person auch in Outlook und Teams sieht, und Einstellungen des Tenants wie ausgeblendete Fotos gelten weiter.
+
+**Einmal je Umgebung von Hand zustimmen.** Die Pipeline darf keine Einwilligung erteilen. Nach dem Apply im Entra Admin Center → App-Registrierungen → `<projekt>-<umgebung>-web` → **API-Berechtigungen** → **Administratorzustimmung für „&lt;Tenant&gt;“ erteilen**, oder als Admin `az ad app permission admin-consent --id <spa-client-id>`. Der Terraform-Output `directory_permissions` am Ende des Apply-Logs nennt Client-ID, Berechtigungen und den Befehl.
+
+- Ohne Administratorzustimmung bekommt das Frontend nur dann ein Token für Graph, wenn die Personen selbst zustimmen dürfen. Viele Tenants erlauben das nur für Berechtigungen mit „geringem Risiko“, oft nur `User.Read`; dann ist die Administratorzustimmung nötig, oder ein Admin stuft `User.ReadBasic.All`, `People.Read` und `Presence.Read.All` unter Unternehmensanwendungen → Einwilligung und Berechtigungen → **Berechtigungsklassifizierungen** als geringes Risiko ein (gilt für alle Apps im Tenant).
+- Kommen `presence` oder `roleFilter` später dazu, erneut zustimmen; eine Zustimmung deckt nur die Berechtigungen ab, die beim Klick eingetragen waren.
+- Abschalten entfernt die Berechtigungen aus der Registrierung und `directory` aus `config.json`. Eine erteilte Zustimmung bleibt, bis ein Admin sie an der Enterprise App unter **Berechtigungen** widerruft.
+
+**Je Umgebung:** `environments.<name>.auth.directory` überschreibt einzelne Schalter, etwa aus in `prod`, solange dort noch niemand zugestimmt hat. `enabled` ist der Hauptschalter; `enabled: false` schaltet auch `presence` und `roleFilter` ab:
+
+```yaml
+environments:
+  prod:
+    auth:
+      directory: { enabled: false }
+```
+
+**Vorhandene App-Registrierung:** Mit `auth.existingRegistration` legt Terraform nichts an, `config.json` bekommt `directory` trotzdem. Der Admin des anderen Tenants trägt die Berechtigungen an seiner Registrierung des Frontends ein und stimmt zu; welche mit welcher ID, steht im Output `directory_permissions` und in der README von [seed-terraform](https://github.com/blackforestsentinel/seed-terraform) beim Modul `sso`.
+
 ### mcp: MCP-Server für KI-Werkzeuge
 
 Stellt unter `/api/mcp` einen MCP-Server bereit, über den Claude, VS Code und andere KI-Werkzeuge im Namen der angemeldeten Person Werkzeuge der API aufrufen. Setzt `sso` voraus; ohne `sso` scheitert schon der Plan.
@@ -278,7 +319,7 @@ In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setze
 
 ## Einstellungen je Umgebung
 
-Eigene App-Settings, abweichende Feature-Schalter und die Obergrenze der Instanzen stehen in `project.yaml`, für alle Umgebungen oder je Umgebung:
+Eigene App-Settings, abweichende Feature-Schalter, die Obergrenze der Instanzen und die Personen-Komponenten stehen in `project.yaml`, für alle Umgebungen oder je Umgebung:
 
 ```yaml
 settings:                           # für alle Umgebungen
@@ -292,12 +333,15 @@ environments:
       Beispiel__Mocks: "true"
   prod:
     maxInstances: 4
+    auth:
+      directory: { enabled: false }   # überschreibt einzelne Schalter aus auth.directory
 ```
 
 - **App-Settings:** Terraform setzt `settings` und `environments.<name>.settings` als App-Settings der Function; bei gleichem Namen gilt der Wert der Umgebung. Im Code liest `IConfiguration` sie wie jede andere Einstellung, `Beispiel__Zeitzone` als `Beispiel:Zeitzone`. Seed-eigene Settings gehen bei gleichem Namen vor: die der Features (`Seed__*`, `Auth__*`, `SeedStorage__*`, `Secrets__*`, `Mcp__*`) und die Grundeinstellungen der Function (`AzureWebJobsStorage__*`, `APPLICATIONINSIGHTS_*`, `AZURE_CLIENT_ID`).
 - **Werte sind Text.** Zahlen und `true`/`false` nimmt Terraform als Text an, aber YAML liest manches anders, als es dasteht: `007` wird `7`, `1.50` wird `1.5`, `on` und `yes` werden `true`. Solche Werte in Anführungszeichen setzen. Listen, Objekte und leere Werte (für leer `""` schreiben) hält der Plan mit einer Meldung auf.
 - **Features:** `environments.<name>.features` überschreibt einzelne Schalter aus `features`, etwa ohne Key Vault in `test`. Terraform und die Flags `Seed__Features__*` der API folgen dem Wert der Umgebung. Der Smoke-Test der Pipeline liest bisher nur `features`; `sso` deshalb nicht je Umgebung abschalten, sonst erwartet er auf `api/me` weiter eine 401.
 - **Instanzen:** `maxInstances` begrenzt das Hochskalieren der Function (Flex Consumption erlaubt 1 bis 1000). Ohne Angabe gilt der Standard des Moduls `core`, 40.
+- **Personen-Komponenten:** `environments.<name>.auth.directory` überschreibt einzelne Schalter aus `auth.directory`, siehe [Personen und Profilbilder](#personen-und-profilbilder). Weitere Schlüssel unter `environments.<name>.auth` gibt es nicht.
 - Eine Umgebung ohne Eintrag unter `environments` nutzt die allgemeinen Angaben. Unbekannte Schlüssel dort, etwa der Tippfehler `maxInstance`, hält der Plan auf.
 
 Geänderte Settings ändern die Function App: Die Pipeline wartet auf die Infrastruktur-Freigabe, danach startet die Function neu. Lokal gelten sie nicht von selbst; `api/Api/local.settings.json` braucht sie unter `Values`. Plattform-Settings wie `WEBSITE_TIME_ZONE`, `TZ` oder `FUNCTIONS_WORKER_RUNTIME` gibt es auf Flex Consumption nicht; eine Zeitzone gehört deshalb in eine eigene Einstellung wie `Beispiel__Zeitzone`.
@@ -366,7 +410,7 @@ Für reine APIs, etwa als Backend für einen Custom Connector:
 
 | Header | Wert und Zweck |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'`, Skripte und Styles nur aus eigenen Dateien, Bilder zusätzlich als `data:` (kleine Assets bettet Vite so ein); `connect-src` erlaubt die Anmeldung bei `https://login.microsoftonline.com` und die API; `frame-src` die stille Anmeldung von MSAL im unsichtbaren iframe; `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` |
+| `Content-Security-Policy` | `default-src 'self'`, Skripte und Styles nur aus eigenen Dateien, Bilder zusätzlich als `data:` (kleine Assets bettet Vite so ein, die Personen-Komponenten Profilbilder); `connect-src` erlaubt die Anmeldung bei `https://login.microsoftonline.com`, Microsoft Graph (`https://graph.microsoft.com`, für [Personen und Profilbilder](#personen-und-profilbilder)) und die API; `frame-src` die stille Anmeldung von MSAL im unsichtbaren iframe; `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |

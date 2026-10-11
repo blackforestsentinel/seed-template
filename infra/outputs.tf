@@ -15,7 +15,7 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.env_unknown) == 0
-    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances und settings."
+    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings und auth.directory."
   }
 }
 
@@ -37,8 +37,24 @@ output "custom_domain_dns_records" {
 }
 
 output "frontend_config" {
-  description = "Laufzeitkonfiguration des Frontends; die Pipeline schreibt sie als config.json. Mit sso kommt der Auth-Teil dazu."
+  description = "Laufzeitkonfiguration des Frontends; die Pipeline schreibt sie als config.json. Mit sso kommt der Auth-Teil dazu, mit auth.directory darin directory."
   value       = merge({ apiBaseUrl = module.core.function_app_url }, [for m in module.sso : m.frontend_config]...)
+
+  precondition {
+    condition     = local.directory != null
+    error_message = "auth.directory in project.yaml (auch unter environments): ein Objekt erwartet, z. B. { enabled: true, presence: true }."
+  }
+
+  precondition {
+    condition     = length(local.directory_unknown) == 0
+    error_message = "auth.directory in project.yaml: ${join(", ", local.directory_unknown)} unbekannt; erlaubt sind enabled, presence und roleFilter."
+  }
+}
+
+# Null ohne auth.directory; dann ändert sich am Plan bestehender Projekte nichts.
+output "directory_permissions" {
+  description = "Mit auth.directory: delegierte Graph-Berechtigungen an der SPA-Registrierung und der Befehl für die Administratorzustimmung (README, „Personen und Profilbilder“)."
+  value       = one(module.sso[*].directory_permissions)
 }
 
 # Leer statt null ohne mcp, wie bei static_web_app_url: lesbar mit terraform output -raw.
