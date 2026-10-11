@@ -2,17 +2,36 @@ locals {
   cfg = yamldecode(file("${path.root}/../project.yaml"))
   # Abweichungen dieser Umgebung aus environments.<name>; ohne Eintrag gelten die allgemeinen
   # Angaben. Unbekannte Schlüssel (Tippfehler) hält die Prüfung am Output function_app_name auf.
-  env         = try(local.cfg.environments[var.environment], {})
-  env_unknown = setsubtract(try(keys(local.env), []), ["features", "maxInstances", "settings"])
+  env = try(local.cfg.environments[var.environment], {})
+  env_unknown = setunion(
+    setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings", "hosting", "mcp"]),
+    [for key in setsubtract(try(keys(local.env.auth), []), ["directory"]) : "auth.${key}"],
+  )
   # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
   features = merge(try(local.cfg.features, {}), try(local.env.features, {}))
   sso      = try(local.features.sso, false)
   mcp      = try(local.features.mcp, false)
 
-  # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API).
+  # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API). Gilt für alle
+  # Umgebungen, wie frontend in azure-pipelines.yml.
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
   frontend       = local.static_web_app != "None"
-  custom_domains = try([for domain in local.cfg.hosting.customDomains : lower(domain)], [])
+  # Eigene Domains und CORS: hosting, einzelne Schlüssel ersetzt aus environments.<name>.hosting,
+  # denn eine Domain gehört zu genau einer Static Web App, meist der von prod.
+  hosting             = merge(try(local.cfg.hosting, {}), try(local.env.hosting, {}))
+  env_hosting_unknown = setsubtract(try(keys(local.env.hosting), []), ["customDomains", "corsAllowedOrigins"])
+  custom_domains      = try([for domain in local.hosting.customDomains : lower(domain)], [])
+  # Zusätzliche Origins für die CORS-Freigabe der Function, etwa eine Website, die eine öffentliche
+  # Route aus dem Browser aufruft. Static Web App und eigene Domains sind immer freigegeben, in dev
+  # zusätzlich der lokale Vite-Server.
+  cors_extra_origins = try([for origin in local.hosting.corsAllowedOrigins : trimsuffix(lower(origin), "/")], [])
+  cors_invalid       = [for origin in local.cors_extra_origins : origin if !can(regex("^https?://[a-z0-9.-]+(:[0-9]+)?$", origin))]
+  cors_allowed_origins = distinct(concat(
+    var.environment == "dev" ? ["http://localhost:5173"] : [],
+    local.cors_extra_origins,
+  ))
+  # mcp, einzelne Schlüssel ersetzt aus environments.<name>.mcp, etwa die eigene Domain je Umgebung.
+  mcp_cfg = merge(try(local.cfg.mcp, {}), try(local.env.mcp, {}))
 
   # App-Rollen aus auth.roles (nur mit sso in Gebrauch); die Capabilities je Rolle liest die API
   # aus derselben Datei. Ohne Abschnitt keine Rollen.
@@ -25,6 +44,12 @@ locals {
   }, {})
   # Vorhandene App-Registrierung für diese Umgebung, sonst legt sso sie an.
   auth_existing = try(local.cfg.auth.existingRegistration[var.environment], null)
+  # Personen-Komponenten im Frontend (nur mit sso und Frontend in Gebrauch): auth.directory,
+  # einzelne Schalter überschrieben aus environments.<name>.auth.directory, etwa aus in einer
+  # Umgebung, deren Tenant noch nicht zugestimmt hat. Kein Objekt oder unbekannte Schlüssel hält
+  # die Prüfung am Output frontend_config auf.
+  directory         = try(merge(try(local.cfg.auth.directory, {}), try(local.env.auth.directory, {})), null)
+  directory_unknown = try(setsubtract(keys(local.directory), ["enabled", "presence", "roleFilter"]), [])
   # Ohne Empfänger keine Alarme und kein Budget; das Tageslimit für Logs gilt immer. Eine
   # einzelne Adresse statt einer Liste ist auch erlaubt.
   alert_recipients = compact(flatten([try(local.cfg.monitoring.recipients, [])]))
@@ -39,14 +64,14 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.7.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.8.0"
 
   name                 = local.cfg.project
   environment          = var.environment
   location             = var.location
   static_web_app_sku   = local.static_web_app
   custom_domains       = local.custom_domains
-  cors_allowed_origins = var.environment == "dev" ? ["http://localhost:5173"] : []
+  cors_allowed_origins = local.cors_allowed_origins
   # Eigene Settings zuerst, damit die Seed-eigenen bei gleichem Namen vorgehen; danach je
   # Feature das Flag und die App-Settings des Moduls.
   app_settings = merge(concat(
@@ -63,7 +88,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.7.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.8.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -87,15 +112,23 @@ module "sso" {
     audience      = try(local.auth_existing.audience, null)
   }
 
+  # Personen-Komponenten (seed-web-people): delegierte Graph-Berechtigungen an der SPA und
+  # auth.directory in config.json. Die Zustimmung erteilt ein Admin von Hand (README).
+  directory = {
+    enabled     = try(local.directory.enabled, false)
+    presence    = try(local.directory.presence, false)
+    role_filter = try(local.directory.roleFilter, false)
+  }
+
   # MCP-Server (setzt sso voraus): Scope mcp_access, Client-Registrierung für MCP-Clients und
   # mit eigener Domain deren Adresse als Application ID URI.
   mcp               = local.mcp
-  mcp_custom_domain = try(lower(local.cfg.mcp.customDomain), null)
-  mcp_redirect_uris = try(local.cfg.mcp.redirectUris, null)
+  mcp_custom_domain = try(lower(local.mcp_cfg.customDomain), null)
+  mcp_redirect_uris = try(local.mcp_cfg.redirectUris, null)
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.7.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.8.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -115,7 +148,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.7.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.8.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
