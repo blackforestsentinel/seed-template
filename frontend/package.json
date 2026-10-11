@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@blackforestsentinel/seed-web-auth": "0.4.0",
-    "@blackforestsentinel/seed-web-core": "0.4.0",
-    "@blackforestsentinel/seed-web-people": "0.4.0",
+    "@blackforestsentinel/seed-web-auth": "0.4.1",
+    "@blackforestsentinel/seed-web-core": "0.4.1",
+    "@blackforestsentinel/seed-web-people": "0.4.1",
     "@tanstack/react-query": "5.104.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
