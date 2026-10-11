@@ -1,4 +1,39 @@
 {
   "apiBaseUrl": "http://localhost:7071",
-  "auth": { "mode": "local" }
+  "auth": {
+    "mode": "local",
+    "directory": {
+      "people": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "displayName": "Erika Mustermann",
+          "mail": "erika.mustermann@example.org",
+          "jobTitle": "Buchhalterin",
+          "department": "Buchhaltung",
+          "roles": ["Admin"]
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "displayName": "Max Mustermann",
+          "mail": "max.mustermann@example.org",
+          "jobTitle": "Entwickler",
+          "department": "IT"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "displayName": "Lena Beispiel",
+          "mail": "lena.beispiel@example.org",
+          "jobTitle": "Projektleiterin",
+          "department": "Vertrieb"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "displayName": "Jonas Platzhalter",
+          "mail": "jonas.platzhalter@example.org",
+          "jobTitle": "Werkstudent",
+          "department": "IT"
+        }
+      ]
+    }
+  }
 }
