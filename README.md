@@ -52,7 +52,7 @@ Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsof
 
 ## Bausteine im Code
 
-- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu, mit dem Feature `storage` kommen `builder.AddSeedStorage()` aus `Bfs.Seed.Storage` und das Beispiel in `api/Api/Jobs` dazu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
+- **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu, `Bfs.Seed.OpenApi` exportiert beim Build das OpenAPI-Dokument für den Custom Connector, mit dem Feature `storage` kommen `builder.AddSeedStorage()` aus `Bfs.Seed.Storage` und das Beispiel in `api/Api/Jobs` dazu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API. `@blackforestsentinel/seed-web-people` liefert Anmeldeseite, Benutzermenü in der Kopfzeile, die Seite „Kein Zugriff“ und Personen-Komponenten; `frontend/src/pages/PeoplePage.tsx` zeigt Personenauswahl und `PersonLabel`. Farben und Schrift kommen als CSS-Variablen (`--seed-…`) aus deren Stylesheet, hell und dunkel.
 - **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
@@ -317,7 +317,46 @@ azurite --inMemoryPersistence --skipApiVersionCheck   # eigenes Terminal
 
 In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` entfernen. `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
 
-`customConnector` folgt mit Phase 4.
+### customConnector: Power Automate, Power Apps und Copilot Studio
+
+Macht die API zu einem Custom Connector der Power Platform: Ihre Functions erscheinen in Power Automate und Power Apps als Aktionen und in Copilot Studio als Tools. Die Pipeline legt den Connector nach jedem Deploy an oder aktualisiert ihn, aus dem OpenAPI-Dokument, das `Bfs.Seed.OpenApi` beim Build erzeugt. Setzt `sso` voraus.
+
+**Einrichten:**
+
+1. Einmal je Power-Platform-Umgebung: das Tenant-Onboarding von seed-pipelines mit `-PowerPlatformEnvironmentUrl <umgebungs-url>` ausführen. Die Pipeline-Identität wird dort Anwendungsbenutzer mit der Rolle Environment Maker. Die Umgebung braucht Dataverse; die Umgebungs-URL steht im Power Platform Admin Center.
+2. In `project.yaml` `customConnector: true` und `customConnector.environmentUrl` setzen, meist je Umgebung unter `environments.<name>.customConnector`. Ohne `environmentUrl` entsteht in einer Umgebung kein Connector.
+3. Pushen. Terraform legt die Client-Registrierung `<projekt>-<umgebung>-connector` an (Freigabe), danach legt der Deploy den Connector an.
+
+**Verbinden:** In Power Automate eine Verbindung zum Connector anlegen und mit dem eigenen Konto anmelden. Der Connector ruft die API im Namen der Person auf; es gelten dieselben App-Rollen und Capabilities wie im Browser, Functions ohne passende Capability antworten mit 403. Ein Secret gibt es nicht: Der Connector meldet sich über seine Managed Identity bei Entra an (Option der Power Platform, derzeit Preview). Die Redirect-URI und den Federated Credential dafür trägt die Pipeline an der Registrierung ein.
+
+**Operationen beschreiben:** Was im Connector erscheint, beschreiben Attribute an den Functions; Pfade, Methoden und Routenparameter kommen aus `[HttpTrigger]`. Copilot Studio wählt Tools nach Zusammenfassung und Beschreibung aus, also beschreiben, was die Operation tut und wann man sie braucht.
+
+```csharp
+[Function("GetJob")]
+[OpenApiOperation("GetJob", "Job abrufen", Description = "Status und Ergebnis eines eigenen Jobs.")]
+[OpenApiParameter("id", Description = "Job-ID aus CreateJob", Summary = "Job-ID")]
+[OpenApiResponse(200, typeof(JobResponse), Description = "Job")]
+[OpenApiResponse(404, Description = "Job nicht gefunden")]
+public async Task<IActionResult> Get(
+    [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "jobs/{id}")] HttpRequest request, string id, ...)
+```
+
+- `[OpenApiOperation(id, zusammenfassung)]`: eindeutige ID und Titel der Aktion; `Visibility = OpenApiVisibility.Internal` blendet sie aus (Beispiel: `GetHealth`).
+- `[OpenApiRequestBody(typeof(T))]` und `[OpenApiResponse(status, typeof(T))]`: Body als JSON; Antworten ohne Body nur mit Statuscode. Rückgabewerte als Record statt anonymem Objekt, sonst gibt es kein Schema (Beispiele: `JobError`, `SettingsInfo`).
+- Beschreibungen von Feldern per `[property: Description("…")]` am Record.
+- `[OpenApiIgnore]` nimmt eine Function heraus. Functions ohne `[OpenApiOperation]` erscheinen trotzdem, der Build warnt dann (`SEEDOPENAPI001`); `api/Api.Tests/OpenApiTests.cs` verlangt, dass es keine Warnungen gibt.
+- Titel und Beschreibung der API: `[assembly: OpenApiInfo(…)]` in `Program.cs`. Alles Weitere in der README von `Bfs.Seed.OpenApi`.
+
+Das Dokument entsteht bei jedem Build unter `api/Api/bin/<Konfiguration>/net10.0/openapi/openapi.json` und lässt sich lokal ansehen. Es ist Swagger 2.0, weil die Power Platform nichts anderes annimmt; `host` setzt die Pipeline je Umgebung.
+
+**Weitere Angaben in `project.yaml`:**
+
+- `displayName`: Name in der Power Platform, höchstens 30 Zeichen (Standard: `<project> <umgebung>`).
+- `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API.
+- `iconBrandColor`: Farbe des Symbols, Standard `#007ee5`.
+
+**Abschalten:** `customConnector: false` entfernt die Client-Registrierung; Verbindungen funktionieren dann nicht mehr. Den Connector selbst löscht die Pipeline nicht, das geht in Power Automate unter **Benutzerdefinierte Connectors**.
+
 
 ## Einstellungen je Umgebung
 

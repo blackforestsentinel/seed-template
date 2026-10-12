@@ -11,7 +11,8 @@ features:
   storage: false
   # Key Vault für Secrets von Drittanbietern (API-Keys, Passwörter); Namen unter keyVault
   keyVault: false
-  # Custom Connector für die Power Platform, setzt sso voraus (Phase 4)
+  # Custom Connector für Power Automate, Power Apps und Copilot Studio, setzt sso voraus;
+  # Power-Platform-Umgebung unter customConnector: (unten)
   customConnector: false
 
 hosting:
@@ -65,6 +66,18 @@ auth:
 #   customDomain: mcp.example.org
 #   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
 #   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]
+
+# Nur mit features.customConnector. Die Pipeline legt den Connector nach dem Deploy aus dem
+# OpenAPI-Dokument der API an (README, Abschnitt customConnector). Ohne environmentUrl entsteht in
+# einer Umgebung keiner.
+# customConnector:
+#   # Umgebungs-URL der Power-Platform-Umgebung (Power Platform Admin Center), meist je Umgebung
+#   # unter environments.<name>.customConnector (unten)
+#   environmentUrl: https://org0000000.crm4.dynamics.com
+#   # Anzeigename, höchstens 30 Zeichen (Standard: <project> <umgebung>)
+#   displayName: My App
+#   # Wer den Connector sieht: everyone (alle in der Power-Platform-Umgebung, Standard) oder none
+#   shareWith: everyone
 
 monitoring:
   # Empfänger von Alarmen und Budget-Warnungen (Adresse oder Verteiler), z. B.
@@ -134,5 +147,8 @@ storage:
 #       corsAllowedOrigins: [https://www.example.org]
 #     mcp:                            # ersetzt einzelne Angaben aus mcp
 #       customDomain: mcp.example.org
+#     customConnector:                # ersetzt einzelne Angaben aus customConnector
+#       environmentUrl: https://org1111111.crm4.dynamics.com
+#       displayName: My App
 #     auth:
 #       directory: { enabled: false }   # überschreibt einzelne Schalter aus auth.directory

@@ -2,10 +2,15 @@ using Api.Jobs;
 using Bfs.Seed.Auth;
 using Bfs.Seed.Functions.Core;
 using Bfs.Seed.Mcp;
+using Bfs.Seed.OpenApi;
 using Bfs.Seed.Storage;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+
+// Titel und Beschreibung von openapi.json (Swagger 2.0), das beim Build unter bin/.../openapi/ entsteht;
+// daraus legt die Pipeline den Custom Connector an (Feature customConnector).
+[assembly: OpenApiInfo("My App", Description = "Beispiel-API: Status, angemeldete Person, Einstellungen und Jobs.")]
 
 var builder = FunctionsApplication.CreateBuilder(args);
 

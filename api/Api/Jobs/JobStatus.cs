@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Azure;
 using Azure.Data.Tables;
 
@@ -39,10 +40,17 @@ public sealed class JobStatus : ITableEntity
 public sealed record JobMessage(string PartitionKey, string JobId);
 
 /// <summary>Anfrage an <c>POST /api/jobs</c>.</summary>
-public sealed record JobRequest(string? Input);
+public sealed record JobRequest([property: Description("Text, 1 bis 1000 Zeichen")] string? Input);
+
+/// <summary>Fehler-Body bei 400; ein Record statt eines anonymen Objekts, damit openapi.json ein Schema hat.</summary>
+public sealed record JobError(string Error);
 
 /// <summary>Antwort mit dem Status eines Jobs.</summary>
-public sealed record JobResponse(string Id, string Status, string? Result, int Attempts)
+public sealed record JobResponse(
+    [property: Description("Job-ID")] string Id,
+    [property: Description("queued, running, done oder failed")] string Status,
+    [property: Description("Ergebnis, sobald der Status done ist")] string? Result,
+    [property: Description("Zahl der Verarbeitungsversuche")] int Attempts)
 {
     public static JobResponse From(JobStatus job) => new(job.RowKey, job.Status, job.Result, job.Attempts);
 }
