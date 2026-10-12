@@ -19,7 +19,7 @@ resources:
     - repository: seed
       type: github
       name: blackforestsentinel/seed-pipelines
-      ref: refs/tags/v0.7.1
+      ref: refs/tags/v0.8.0
       # GitHub-Service-Connection der Azure-DevOps-Organisation (nur Lesezugriff nötig)
       endpoint: github-blackforestsentinel
 

@@ -4,7 +4,7 @@ locals {
   # Angaben. Unbekannte Schlüssel (Tippfehler) hält die Prüfung am Output function_app_name auf.
   env = try(local.cfg.environments[var.environment], {})
   env_unknown = setunion(
-    setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings", "hosting", "mcp"]),
+    setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings", "hosting", "mcp", "customConnector"]),
     [for key in setsubtract(try(keys(local.env.auth), []), ["directory"]) : "auth.${key}"],
   )
   # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
@@ -32,6 +32,22 @@ locals {
   ))
   # mcp, einzelne Schlüssel ersetzt aus environments.<name>.mcp, etwa die eigene Domain je Umgebung.
   mcp_cfg = merge(try(local.cfg.mcp, {}), try(local.env.mcp, {}))
+
+  # Custom Connector der Power Platform: customConnector, einzelne Schlüssel ersetzt aus
+  # environments.<name>.customConnector, etwa die Power-Platform-Umgebung je Umgebung. Ohne
+  # environmentUrl entsteht in dieser Umgebung kein Connector. Den Connector legt die Pipeline an
+  # (Output custom_connector), Terraform nur die Client-Registrierung (Modul sso).
+  connector_feature = try(local.features.customConnector, false)
+  connector_cfg     = merge(try(local.cfg.customConnector, {}), try(local.env.customConnector, {}))
+  connector_unknown = setsubtract(keys(local.connector_cfg), ["environmentUrl", "displayName", "shareWith", "iconBrandColor"])
+  connector_url     = try(trimsuffix(lower(local.connector_cfg.environmentUrl), "/"), null)
+  connector         = local.connector_feature && local.connector_url != null
+  # Anzeigename in Power Automate, Power Apps und Copilot Studio; Dataverse nimmt höchstens 30 Zeichen.
+  connector_display_name = try(local.connector_cfg.displayName, "${local.cfg.project} ${var.environment}")
+  connector_share_with   = lower(try(local.connector_cfg.shareWith, "everyone"))
+  # Name in Dataverse nach dem Präfix des Publishers: fest je Projekt und Umgebung, nur Kleinbuchstaben
+  # und Ziffern. Er identifiziert den Connector bei jedem Lauf, auch wenn sich der Anzeigename ändert.
+  connector_name = "${substr(replace(lower(local.cfg.project), "/[^a-z0-9]/", ""), 0, 16)}${substr(replace(lower(var.environment), "/[^a-z0-9]/", ""), 0, 8)}"
 
   # App-Rollen aus auth.roles (nur mit sso in Gebrauch); die Capabilities je Rolle liest die API
   # aus derselben Datei. Ohne Abschnitt keine Rollen.
@@ -64,7 +80,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.8.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.9.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -88,7 +104,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.8.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.9.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -125,10 +141,14 @@ module "sso" {
   mcp               = local.mcp
   mcp_custom_domain = try(lower(local.mcp_cfg.customDomain), null)
   mcp_redirect_uris = try(local.mcp_cfg.redirectUris, null)
+
+  # Custom Connector (setzt sso voraus): Client-Registrierung ohne Secret; Connector, Redirect-URI
+  # und Federated Credential legt die Pipeline an (Output custom_connector).
+  connector = local.connector
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.8.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.9.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -148,7 +168,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.8.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.9.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
