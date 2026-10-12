@@ -1,4 +1,5 @@
 using Bfs.Seed.Auth;
+using Bfs.Seed.OpenApi;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -12,6 +13,9 @@ namespace Api.Me;
 public sealed class MeFunction
 {
     [Function("Me")]
+    [OpenApiOperation("GetMe", "Angemeldete Person abrufen", Description = "Name, App-Rollen und Berechtigungen (Capabilities) der angemeldeten Person.")]
+    [OpenApiResponse(200, typeof(SeedUserInfo), Description = "Angemeldete Person")]
+    [OpenApiResponse(401, Description = "Ohne gültiges Token")]
     public IActionResult Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "me")] HttpRequest request)
         => new OkObjectResult(SeedUserInfo.From(request.HttpContext.User));
