@@ -15,7 +15,7 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.env_unknown) == 0
-    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings, hosting, mcp und auth.directory."
+    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings, hosting, mcp, customConnector und auth.directory."
   }
 
   precondition {
@@ -87,4 +87,50 @@ output "mcp_client_id" {
 output "key_vault_name" {
   description = "Name des Key Vaults für az keyvault secret set. Leer ohne Feature keyVault."
   value       = try(module.keyvault[0].key_vault_name, "")
+}
+
+# Null ohne features.customConnector oder ohne customConnector.environmentUrl für diese Umgebung;
+# dann tut der Connector-Schritt der Pipeline nichts.
+output "custom_connector" {
+  description = "Angaben für den Custom Connector, den die Pipeline nach dem Deploy anlegt oder aktualisiert (seed-pipelines, steps/custom-connector.yml)."
+  value = local.connector ? {
+    environmentUrl = local.connector_url
+    name           = local.connector_name
+    displayName    = local.connector_display_name
+    shareWith      = local.connector_share_with
+    iconBrandColor = try(local.connector_cfg.iconBrandColor, "#007ee5")
+    clientId       = one(module.sso[*].connector_client_id)
+    tenantId       = one(module.sso[*].tenant_id)
+    resourceUri    = one(module.sso[*].api_identifier_uri)
+  } : null
+
+  precondition {
+    condition     = !local.connector_feature || local.sso
+    error_message = "features.customConnector setzt features.sso voraus: In project.yaml sso: true setzen."
+  }
+
+  precondition {
+    condition     = !local.connector_feature || local.auth_existing == null
+    error_message = "features.customConnector mit auth.existingRegistration geht noch nicht: Die Client-Registrierung des Connectors müsste im anderen Tenant von Hand entstehen (README von seed-terraform, Modul sso)."
+  }
+
+  precondition {
+    condition     = length(local.connector_unknown) == 0
+    error_message = "customConnector in project.yaml: ${join(", ", local.connector_unknown)} unbekannt; erlaubt sind environmentUrl, displayName, shareWith und iconBrandColor."
+  }
+
+  precondition {
+    condition     = local.connector_url == null || can(regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)+$", local.connector_url))
+    error_message = "customConnector.environmentUrl in project.yaml: die Umgebungs-URL der Power-Platform-Umgebung ohne Pfad, z. B. https://org0000000.crm4.dynamics.com (Power Platform Admin Center)."
+  }
+
+  precondition {
+    condition     = length(local.connector_display_name) <= 30 && can(regex("^[A-Za-z0-9][A-Za-z0-9 _-]*$", local.connector_display_name))
+    error_message = "customConnector.displayName in project.yaml: höchstens 30 Zeichen, nur Buchstaben ohne Umlaute, Ziffern, Leerzeichen, - und _, am Anfang ein Buchstabe oder eine Ziffer; anderes nimmt die Power Platform nicht an (\"${local.connector_display_name}\")."
+  }
+
+  precondition {
+    condition     = contains(["everyone", "none"], local.connector_share_with)
+    error_message = "customConnector.shareWith in project.yaml: everyone (alle in der Power-Platform-Umgebung) oder none."
+  }
 }

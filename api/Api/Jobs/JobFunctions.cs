@@ -1,3 +1,4 @@
+using Bfs.Seed.OpenApi;
 using Bfs.Seed.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +19,10 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
     public const string QueueName = "jobs";
 
     [Function("CreateJob")]
+    [OpenApiOperation("CreateJob", "Job anlegen", Description = "Stellt einen Job in die Warteschlange; den Fortschritt liefert GetJob.")]
+    [OpenApiRequestBody(typeof(JobRequest))]
+    [OpenApiResponse(202, typeof(JobResponse), Description = "Job angelegt, Status queued")]
+    [OpenApiResponse(400, typeof(JobError), Description = "Eingabe ungültig")]
     public async Task<IActionResult> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "jobs")] HttpRequest request,
         CancellationToken cancellationToken)
@@ -25,7 +30,7 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
         var body = await request.ReadFromJsonAsync<JobRequest>(cancellationToken);
         if (string.IsNullOrWhiteSpace(body?.Input) || body.Input.Length > 1000)
         {
-            return new BadRequestObjectResult(new { error = "input: 1 bis 1000 Zeichen" });
+            return new BadRequestObjectResult(new JobError("input: 1 bis 1000 Zeichen"));
         }
 
         var job = new JobStatus { PartitionKey = Owner(request), RowKey = Guid.NewGuid().ToString("N"), Input = body.Input };
@@ -38,6 +43,10 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
     }
 
     [Function("GetJob")]
+    [OpenApiOperation("GetJob", "Job abrufen", Description = "Status und Ergebnis eines eigenen Jobs.")]
+    [OpenApiParameter("id", Description = "Job-ID aus CreateJob", Summary = "Job-ID")]
+    [OpenApiResponse(200, typeof(JobResponse), Description = "Job")]
+    [OpenApiResponse(404, Description = "Job nicht gefunden")]
     public async Task<IActionResult> Get(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "jobs/{id}")] HttpRequest request,
         string id,
