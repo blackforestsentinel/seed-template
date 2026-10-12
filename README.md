@@ -351,7 +351,7 @@ Das Dokument entsteht bei jedem Build unter `api/Api/bin/<Konfiguration>/net10.0
 
 **Weitere Angaben in `project.yaml`:**
 
-- `displayName`: Name in der Power Platform, höchstens 30 Zeichen (Standard: `<project> <umgebung>`).
+- `displayName`: Name in der Power Platform, höchstens 30 Zeichen aus Buchstaben ohne Umlaute, Ziffern, Leerzeichen, `-` und `_` (Standard: `<project> <umgebung>`); anderes lehnt die Power Platform ab, der Plan prüft es vorher.
 - `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API.
 - `iconBrandColor`: Farbe des Symbols, Standard `#007ee5`.
 
