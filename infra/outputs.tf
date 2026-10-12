@@ -125,8 +125,8 @@ output "custom_connector" {
   }
 
   precondition {
-    condition     = length(local.connector_display_name) <= 30
-    error_message = "customConnector.displayName in project.yaml: höchstens 30 Zeichen, mehr nimmt die Power Platform nicht an (\"${local.connector_display_name}\" hat ${length(local.connector_display_name)})."
+    condition     = length(local.connector_display_name) <= 30 && can(regex("^[A-Za-z0-9][A-Za-z0-9 _-]*$", local.connector_display_name))
+    error_message = "customConnector.displayName in project.yaml: höchstens 30 Zeichen, nur Buchstaben ohne Umlaute, Ziffern, Leerzeichen, - und _, am Anfang ein Buchstabe oder eine Ziffer; anderes nimmt die Power Platform nicht an (\"${local.connector_display_name}\")."
   }
 
   precondition {

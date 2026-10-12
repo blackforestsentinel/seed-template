@@ -74,7 +74,8 @@ auth:
 #   # Umgebungs-URL der Power-Platform-Umgebung (Power Platform Admin Center), meist je Umgebung
 #   # unter environments.<name>.customConnector (unten)
 #   environmentUrl: https://org0000000.crm4.dynamics.com
-#   # Anzeigename, höchstens 30 Zeichen (Standard: <project> <umgebung>)
+#   # Anzeigename, höchstens 30 Zeichen aus Buchstaben, Ziffern, Leerzeichen, - und _
+#   # (Standard: <project> <umgebung>)
 #   displayName: My App
 #   # Wer den Connector sieht: everyone (alle in der Power-Platform-Umgebung, Standard) oder none
 #   shareWith: everyone
