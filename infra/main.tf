@@ -85,7 +85,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=feat/browser-extension"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.10.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -109,7 +109,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=feat/browser-extension"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.10.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -156,7 +156,7 @@ module "sso" {
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=feat/browser-extension"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.10.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -176,7 +176,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=feat/browser-extension"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.10.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
