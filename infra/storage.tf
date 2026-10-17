@@ -1,5 +1,10 @@
 # Feature storage: eigener Storage Account mit Tabellen, Queues und Containern aus project.yaml.
 
+# Identität, mit der Terraform läuft: in der Pipeline die Deployment-Identität der Umgebung. Steht
+# der Container extension in storage.containers, darf sie dort die signierte Browser-Erweiterung
+# ablegen (seed-pipelines, extension.signing; README, „Browser-Erweiterungen“).
+data "azurerm_client_config" "current" {}
+
 locals {
   storage     = try(local.features.storage, false)
   storage_cfg = try(local.cfg.storage, {})
@@ -39,6 +44,9 @@ module "storage" {
   tables     = try(local.storage_cfg.tables, [])
   queues     = try(local.storage_cfg.queues, [])
   containers = try(local.storage_cfg.containers, [])
+  # Nur mit dem Container extension: Storage Blob Data Contributor auf diesem Container für die
+  # Deployment-Identität, die im Deploy die Browser-Erweiterung veröffentlicht.
+  extension_publisher_principal_id = data.azurerm_client_config.current.object_id
 
   # Löschsperre, außer im bestätigten Lauf der Pipeline (Datenlöschung bestätigen).
   deletion_lock       = try(local.storage_cfg.deletionLock, true)
