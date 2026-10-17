@@ -15,7 +15,7 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.env_unknown) == 0
-    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings, hosting, mcp, customConnector und auth.directory."
+    error_message = "environments.${var.environment} in project.yaml: ${join(", ", local.env_unknown)} unbekannt; erlaubt sind features, maxInstances, settings, hosting, mcp, customConnector, auth.directory und auth.extraRedirectUris."
   }
 
   precondition {
@@ -25,7 +25,7 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.cors_invalid) == 0
-    error_message = "hosting.corsAllowedOrigins in project.yaml: ${join(", ", local.cors_invalid)} ist kein Origin. Erwartet wird https://<host> (oder http://) mit optionalem Port und ohne Pfad, etwa https://www.example.org."
+    error_message = "hosting.corsAllowedOrigins in project.yaml: ${join(", ", local.cors_invalid)} ist kein Origin. Erwartet wird https://<host> (oder http://) mit optionalem Port und ohne Pfad, etwa https://www.example.org, oder für eine Browser-Erweiterung chrome-extension://<erweiterungs-id> (32 Zeichen a bis p)."
   }
 }
 
@@ -58,6 +58,11 @@ output "frontend_config" {
   precondition {
     condition     = length(local.directory_unknown) == 0
     error_message = "auth.directory in project.yaml: ${join(", ", local.directory_unknown)} unbekannt; erlaubt sind enabled, presence und roleFilter."
+  }
+
+  precondition {
+    condition     = local.sso || length(local.auth_extra_redirect_uris) == 0
+    error_message = "auth.extraRedirectUris in project.yaml (auch unter environments) setzt features.sso voraus: In project.yaml sso: true setzen."
   }
 }
 
