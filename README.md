@@ -388,7 +388,8 @@ environments:
 - **Instanzen:** `maxInstances` begrenzt das Hochskalieren der Function (Flex Consumption erlaubt 1 bis 1000). Ohne Angabe gilt der Standard des Moduls `core`, 40.
 - **Domains und CORS:** `environments.<name>.hosting` ersetzt `customDomains` und `corsAllowedOrigins` aus `hosting`. Eine eigene Domain gehört zu genau einer Static Web App; steht sie unter `hosting`, versucht jede Umgebung, sie an ihre eigene zu hängen. Deshalb gehört sie meist unter die Umgebung, die sie bekommt. Tarif (`staticWebApp`) gilt für alle Umgebungen.
 - **MCP:** `environments.<name>.mcp` ersetzt einzelne Angaben aus `mcp`, etwa `customDomain`, denn auch die eigene Domain der Function gibt es nur einmal.
-- **Personen-Komponenten:** `environments.<name>.auth.directory` überschreibt einzelne Schalter aus `auth.directory`, siehe [Personen und Profilbilder](#personen-und-profilbilder). Weitere Schlüssel unter `environments.<name>.auth` gibt es nicht.
+- **Personen-Komponenten:** `environments.<name>.auth.directory` überschreibt einzelne Schalter aus `auth.directory`, siehe [Personen und Profilbilder](#personen-und-profilbilder).
+- **Browser-Erweiterung:** `environments.<name>.auth.extraRedirectUris` ersetzt `auth.extraRedirectUris`, siehe [Browser-Erweiterungen](#browser-erweiterungen). Weitere Schlüssel unter `environments.<name>.auth` gibt es nicht.
 - Eine Umgebung ohne Eintrag unter `environments` nutzt die allgemeinen Angaben. Unbekannte Schlüssel dort, etwa der Tippfehler `maxInstance`, hält der Plan auf.
 
 Geänderte Settings ändern die Function App: Die Pipeline wartet auf die Infrastruktur-Freigabe, danach startet die Function neu. Lokal gelten sie nicht von selbst; `api/Api/local.settings.json` braucht sie unter `Values`. Plattform-Settings wie `WEBSITE_TIME_ZONE`, `TZ` oder `FUNCTIONS_WORKER_RUNTIME` gibt es auf Flex Consumption nicht; eine Zeitzone gehört deshalb in eine eigene Einstellung wie `Beispiel__Zeitzone`.
@@ -463,8 +464,32 @@ hosting:
 
 - **Origins**, nicht URLs: Schema, Host und optional Port, ohne Pfad und ohne Schrägstrich am Ende. `*` gibt es nicht; der Smoke-Test der Pipeline prüft, dass ein fremder Origin abgelehnt wird.
 - **Je Umgebung** unter `environments.<name>.hosting.corsAllowedOrigins`; die Liste dort ersetzt die allgemeine.
+- **Browser-Erweiterungen** kommen als `chrome-extension://<erweiterungs-id>` dazu (32 Zeichen `a` bis `p`), siehe [Browser-Erweiterungen](#browser-erweiterungen).
 - **CORS ist kein Zugriffsschutz.** Es regelt nur, ob ein Browser die Antwort an das Skript der fremden Seite weitergibt. Was eine Route ohne Token preisgibt, schützt `[AllowAnonymous]` bzw. dessen Fehlen, nicht CORS.
 - Die Function bekommt eine geänderte Liste mit dem nächsten Apply, also nach der Infrastruktur-Freigabe.
+
+### Browser-Erweiterungen
+
+Sonderfall: eine Browser-Erweiterung (Edge oder Chrome, Manifest V3) als weiterer Client derselben API. Sie meldet sich per `chrome.identity.launchWebAuthFlow` mit der Redirect-URI `https://<erweiterungs-id>.chromiumapp.org/` an und ruft die API mit der Origin `chrome-extension://<erweiterungs-id>` auf. Die entpackte Erweiterung zum Entwickeln (feste ID über `key` im Manifest) und die Version aus dem Store haben verschiedene IDs, deshalb steht beides meist je Umgebung in `project.yaml`:
+
+```yaml
+environments:
+  dev:                              # ID der entpackten Erweiterung
+    auth:
+      extraRedirectUris: [https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/]
+    hosting:
+      corsAllowedOrigins: [chrome-extension://abcdefghijklmnopabcdefghijklmnop]
+  prod:                             # ID aus dem Store
+    auth:
+      extraRedirectUris: [https://<store-id>.chromiumapp.org/]
+    hosting:
+      corsAllowedOrigins: [chrome-extension://<store-id>]
+```
+
+- **App-Registrierung:** Terraform trägt `auth.extraRedirectUris` als weitere Redirect-URIs an der App-Registrierung des Frontends (`<projekt>-<umgebung>-web`, Plattform „Single-Page-Anwendung“) ein, ohne Bridge-Seite. Nur dort nimmt Entra ID die Einlösung des Codes mit der Origin der Erweiterung an. Die Registrierung entsteht damit auch in einem Projekt ohne Frontend. Setzt `sso` voraus; erlaubt ist nur `https://`, unter `chromiumapp.org` mit gültiger Erweiterungs-ID. `auth.extraRedirectUris` gilt für alle Umgebungen, `environments.<name>.auth.extraRedirectUris` ersetzt es, auch mit `[]`. Mit `auth.existingRegistration` trägt der Admin des anderen Tenants die URIs ein.
+- **CORS:** `chrome-extension://<erweiterungs-id>` in `hosting.corsAllowedOrigins`. Die Liste je Umgebung ersetzt die allgemeine; weitere Origins dort mit aufführen.
+- **Paketieren** übernimmt der Pipeline-Parameter `extension` aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines), siehe dortige README.
+- **Anmeldung in der Erweiterung:** Einstieg `@blackforestsentinel/seed-web-auth/extension`, siehe README von [`seed-web-auth`](https://github.com/blackforestsentinel/seed-packages/tree/main/web/packages/seed-web-auth).
 
 ### Projekt ohne Frontend (nur API)
 
