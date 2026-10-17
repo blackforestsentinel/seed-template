@@ -26,7 +26,7 @@ locals {
 }
 
 module "storage" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//storage?ref=feat/browser-extension"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//storage?ref=v0.10.0"
   count  = local.storage ? 1 : 0
 
   name                           = local.cfg.project
