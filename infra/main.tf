@@ -5,7 +5,7 @@ locals {
   env = try(local.cfg.environments[var.environment], {})
   env_unknown = setunion(
     setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings", "hosting", "mcp", "customConnector"]),
-    [for key in setsubtract(try(keys(local.env.auth), []), ["directory"]) : "auth.${key}"],
+    [for key in setsubtract(try(keys(local.env.auth), []), ["directory", "extraRedirectUris"]) : "auth.${key}"],
   )
   # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
   features = merge(try(local.cfg.features, {}), try(local.env.features, {}))
@@ -22,10 +22,10 @@ locals {
   env_hosting_unknown = setsubtract(try(keys(local.env.hosting), []), ["customDomains", "corsAllowedOrigins"])
   custom_domains      = try([for domain in local.hosting.customDomains : lower(domain)], [])
   # Zusätzliche Origins für die CORS-Freigabe der Function, etwa eine Website, die eine öffentliche
-  # Route aus dem Browser aufruft. Static Web App und eigene Domains sind immer freigegeben, in dev
-  # zusätzlich der lokale Vite-Server.
+  # Route aus dem Browser aufruft, oder eine Browser-Erweiterung (chrome-extension://<id>). Static
+  # Web App und eigene Domains sind immer freigegeben, in dev zusätzlich der lokale Vite-Server.
   cors_extra_origins = try([for origin in local.hosting.corsAllowedOrigins : trimsuffix(lower(origin), "/")], [])
-  cors_invalid       = [for origin in local.cors_extra_origins : origin if !can(regex("^https?://[a-z0-9.-]+(:[0-9]+)?$", origin))]
+  cors_invalid       = [for origin in local.cors_extra_origins : origin if !can(regex("^(https?://[a-z0-9.-]+(:[0-9]+)?|chrome-extension://[a-p]{32})$", origin))]
   cors_allowed_origins = distinct(concat(
     var.environment == "dev" ? ["http://localhost:5173"] : [],
     local.cors_extra_origins,
@@ -66,6 +66,11 @@ locals {
   # die Prüfung am Output frontend_config auf.
   directory         = try(merge(try(local.cfg.auth.directory, {}), try(local.env.auth.directory, {})), null)
   directory_unknown = try(setsubtract(keys(local.directory), ["enabled", "presence", "roleFilter"]), [])
+  # Weitere Redirect-URIs der SPA ohne Bridge-Seite, etwa einer Browser-Erweiterung:
+  # auth.extraRedirectUris, ersetzt aus environments.<name>.auth.extraRedirectUris, denn entpackte
+  # Erweiterung und Store-Version haben verschiedene IDs. Eine einzelne URI statt einer Liste ist
+  # auch erlaubt; ohne sso hält die Prüfung am Output frontend_config sie auf.
+  auth_extra_redirect_uris = compact(flatten([try(local.env.auth.extraRedirectUris, local.cfg.auth.extraRedirectUris, [])]))
   # Ohne Empfänger keine Alarme und kein Budget; das Tageslimit für Logs gilt immer. Eine
   # einzelne Adresse statt einer Liste ist auch erlaubt.
   alert_recipients = compact(flatten([try(local.cfg.monitoring.recipients, [])]))
@@ -80,7 +85,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.9.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.10.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -104,7 +109,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.9.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.10.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -117,6 +122,9 @@ module "sso" {
   ) : []
   # Bridge-Seite frontend/redirect.html für die stille Anmeldung im iframe.
   spa_redirect_bridge_path = local.frontend ? "/redirect.html" : null
+  # Weitere Redirect-URIs ohne Bridge-Seite, etwa einer Browser-Erweiterung; damit entsteht die
+  # SPA-Registrierung auch ohne Frontend.
+  spa_extra_redirect_uris = local.auth_extra_redirect_uris
 
   app_roles           = local.app_roles
   assignment_required = try(local.cfg.auth.assignmentRequired, false)
@@ -148,7 +156,7 @@ module "sso" {
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.9.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.10.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -168,7 +176,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.9.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.10.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
