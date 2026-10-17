@@ -487,7 +487,12 @@ environments:
 ```
 
 - **App-Registrierung:** Terraform trägt `auth.extraRedirectUris` als weitere Redirect-URIs an der App-Registrierung des Frontends (`<projekt>-<umgebung>-web`, Plattform „Single-Page-Anwendung“) ein, ohne Bridge-Seite. Nur dort nimmt Entra ID die Einlösung des Codes mit der Origin der Erweiterung an. Die Registrierung entsteht damit auch in einem Projekt ohne Frontend. Setzt `sso` voraus; erlaubt ist nur `https://`, unter `chromiumapp.org` mit gültiger Erweiterungs-ID. `auth.extraRedirectUris` gilt für alle Umgebungen, `environments.<name>.auth.extraRedirectUris` ersetzt es, auch mit `[]`. Mit `auth.existingRegistration` trägt der Admin des anderen Tenants die URIs ein.
-- **CORS:** `chrome-extension://<erweiterungs-id>` in `hosting.corsAllowedOrigins`. Die Liste je Umgebung ersetzt die allgemeine; weitere Origins dort mit aufführen.
+- **CORS:** `chrome-extension://<erweiterungs-id>` in `hosting.corsAllowedOrigins`. Die Liste je Umgebung ersetzt die allgemeine; weitere Origins dort mit aufführen. Die CORS-Freigabe der Function beantwortet den Preflight auch für `Authorization` und `If-None-Match`; `host_permissions` braucht die Erweiterung nicht.
+- **Antwort-Header wie `ETag`** liest die Erweiterung nur, wenn die Function sie freigibt. Die CORS-Freigabe der Plattform setzt `Access-Control-Expose-Headers` nicht selbst, lässt den Header aus dem Code aber durch, auch bei 304:
+
+  ```csharp
+  request.HttpContext.Response.Headers.AccessControlExposeHeaders = "ETag";
+  ```
 - **Paketieren** übernimmt der Pipeline-Parameter `extension` aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines), siehe dortige README.
 - **Anmeldung in der Erweiterung:** Einstieg `@blackforestsentinel/seed-web-auth/extension`, siehe README von [`seed-web-auth`](https://github.com/blackforestsentinel/seed-packages/tree/main/web/packages/seed-web-auth).
 
