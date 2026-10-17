@@ -493,8 +493,54 @@ environments:
   ```csharp
   request.HttpContext.Response.Headers.AccessControlExposeHeaders = "ETag";
   ```
-- **Paketieren** übernimmt der Pipeline-Parameter `extension` aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines), siehe dortige README.
+- **Paketieren** übernimmt der Pipeline-Parameter `extension` aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines), siehe dortige README; ohne Store signiert und veröffentlicht ihn die Pipeline mit `extension.signing` (unten).
 - **Anmeldung in der Erweiterung:** Einstieg `@blackforestsentinel/seed-web-auth/extension`, siehe README von [`seed-web-auth`](https://github.com/blackforestsentinel/seed-packages/tree/main/web/packages/seed-web-auth).
+
+#### Selbst gehostet für verwaltete Geräte
+
+Statt aus dem Store kann die Erweiterung von der eigenen API kommen: Die Pipeline signiert sie im Deploy als CRX und legt sie im Storage des Projekts ab, [`Bfs.Seed.Extension`](https://github.com/blackforestsentinel/seed-packages/tree/main/dotnet/src/Bfs.Seed.Extension) liefert sie unter `/api/extension/updates.xml` aus. Verwaltete Geräte installieren sie von dort per Intune-Richtlinie (`ExtensionInstallForcelist`) und holen Updates selbst. Einmal einrichten:
+
+1. **Schlüssel:** `onboarding/New-SeedExtensionKey.ps1` aus seed-pipelines erzeugt den Signaturschlüssel, legt ihn als Secure File im Azure-DevOps-Projekt ab und nennt die Erweiterungs-ID samt den Werten für die nächsten Schritte. Den Schlüssel danach sicher offline ablegen: Azure DevOps gibt ihn nicht wieder heraus, und ein neuer Schlüssel ergibt eine neue ID, also eine neue Erweiterung.
+2. **project.yaml:** Feature `storage` mit dem Container `extension`, dazu Redirect-URI und CORS mit der ID aus dem Schlüssel in jeder Umgebung, in der signiert wird (Standard prod):
+
+   ```yaml
+   features:
+     storage: true
+   storage:
+     containers: [extension]
+   environments:
+     prod:
+       auth:
+         extraRedirectUris: [https://<erweiterungs-id>.chromiumapp.org/]
+       hosting:
+         corsAllowedOrigins: [chrome-extension://<erweiterungs-id>]
+   ```
+
+   Mit dem Container gibt `infra/storage.tf` der Deployment-Identität Schreibrechte auf genau diesen Container (Modul `storage`, `extension_publisher_principal_id`), sonst keine Datenrechte.
+3. **API:** das Paket `Bfs.Seed.Extension` referenzieren und den Update-Endpunkt in `Program.cs` zusammen mit dem Storage einschalten:
+
+   ```csharp
+   if (builder.Configuration.GetValue<bool>("Seed:Features:Storage"))
+   {
+       builder.AddSeedStorage();
+       builder.AddSeedExtensionUpdates();
+       // ...
+   }
+   ```
+
+   `/api/extension/updates.xml` und `/api/extension/packages/<datei>` sind ohne Anmeldung erreichbar, wie der Browser es verlangt; das CRX ist signiert, sein Inhalt nicht geheim. Heißt das Paket in der Pipeline anders als das Projekt (`extension.name`), braucht die API dazu das App-Setting `Extension__PackageName` mit diesem Namen (`settings` in `project.yaml`).
+4. **azure-pipelines.yml:** `signing` unter `extension`, mit den Werten aus Schritt 1:
+
+   ```yaml
+   extension:
+     path: extension
+     signing:
+       secureFile: my-app-extension.pem
+       id: <erweiterungs-id>
+       # environments: [prod]
+   ```
+
+Der Deploy der Umgebung signiert und veröffentlicht dann jede neue Version, prüft, dass `updates.xml` sie ausliefert, und legt CRX und `release.json` als Artefakt `extension_release_<umgebung>` ab. Ein Paket mit unverändertem Inhalt veröffentlicht er nicht erneut, eine kleinere Version nie (README von seed-pipelines, „Signieren und Veröffentlichen“). Auf die Geräte kommt die Erweiterung über die zentrale Intune-Pipeline des Tenants (`seed-intune`, README von seed-pipelines, „Intune: Edge-Erweiterungen verteilen“): nach dem ersten Veröffentlichen ein Pull Request im Repo `seed-tenant` mit `id` und `updateUrl` (`<function-url>/api/extension/updates.xml`; beides steht auch in `release.json`). Edge installiert Erweiterungen von außerhalb des Stores nur auf verwalteten Geräten.
 
 ### Projekt ohne Frontend (nur API)
 
