@@ -233,7 +233,7 @@ Für API-Keys und Passwörter, die keine Managed Identity ersetzen kann (Stripe,
      secretOfficers: [00000000-0000-0000-0000-000000000000]   # optional, Object-IDs
    ```
 
-2. Die Pipeline plant neue Ressourcen und wartet auf die Infrastruktur-Freigabe. Terraform legt den Vault an (nur RBAC, Purge-Schutz, 90 Tage Soft Delete), je Secret einen Platzhalter und die App-Settings `Secrets__StripeKey` und `Secrets__SmtpPassword` als Key-Vault-Referenz. Die Function bekommt `Key Vault Secrets User`, die Personen oder Gruppen aus `secretOfficers` `Key Vault Secrets Officer`.
+2. Die Pipeline plant neue Ressourcen und wartet auf die Infrastruktur-Freigabe. Terraform legt den Vault an (nur RBAC, Purge-Schutz, 90 Tage Soft Delete), je Secret einen Platzhalter und die App-Settings `Secrets__StripeKey` und `Secrets__SmtpPassword` als Key-Vault-Referenz. Die Function bekommt `Key Vault Secrets User`, die Personen oder Gruppen aus `secretOfficers` `Key Vault Secrets Officer`. Jeder Zugriff auf ein Secret und jede Änderung am Vault landet als Audit-Log im Log Analytics Workspace der Umgebung (`AzureDiagnostics`, Kategorie `AuditEvent`, Spalten `OperationName`, `identity_claim_upn_s`, `id_s`).
 3. Werte setzen (siehe unten). Bis dahin startet die API trotzdem; der Health-Endpunkt meldet `status: "degraded"` mit den Namen der fehlenden Secrets, und `Get()` wirft beim Gebrauch eine Meldung mit dem Namen.
 
 Namen: Kleinbuchstaben und Ziffern, Wörter durch Bindestriche getrennt. Im App-Setting beginnt jedes Wort groß und die Bindestriche entfallen: `stripe-key` wird `Secrets__StripeKey`, im Code `Secrets:StripeKey`.
