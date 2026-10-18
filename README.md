@@ -407,6 +407,7 @@ monitoring:
   recipients: [betrieb@example.org]
   budget: { dev: 20, prod: 100 }
   exceptionsPerHour: 5
+  healthCheckHours: 4
   dailyCapGb: 1
 ```
 
@@ -414,11 +415,11 @@ Dann legt Terraform je Umgebung an:
 
 - eine Aktionsgruppe, die an alle Empfänger mailt; Azure schickt jeder neuen Adresse einmal eine Bestätigung,
 - einen Alarm, sobald es in einer Stunde `exceptionsPerHour` Exceptions gab,
-- einen Webtest, der alle 15 Minuten aus Amsterdam und Dublin `/api/health` aufruft, und einen Alarm, wenn er von beiden Standorten aus scheitert,
+- eine Logic App, die alle `healthCheckHours` Stunden (Default 4, höchstens 12) `/api/health` aufruft, und einen Alarm, wenn der Aufruf auch nach Wiederholungen scheitert,
 - einen Alarm, wenn das Tageslimit für Logs erreicht ist, weil bis zum Tageswechsel dann auch die übrigen Alarme still bleiben,
 - mit Betrag für die Umgebung ein Monatsbudget der Resource Group in der Abrechnungswährung: Warnung bei 80 % der tatsächlichen Kosten und wenn die Prognose den Betrag übersteigt. `budget: 50` gilt für alle Umgebungen.
 
-Die Meldungen enthalten nur Zählwerte, keine Inhalte von Exceptions oder Logs; die Details stehen in Application Insights. Der Health-Endpunkt muss ohne Token mit 200 antworten, deshalb trägt er `[AllowAnonymous]`. Webtest und Alarme kosten zusammen rund 4,50 Euro im Monat je Umgebung, Details und Entscheidungen im [Modul monitoring](https://github.com/blackforestsentinel/seed-terraform/tree/main/monitoring).
+Die Meldungen enthalten nur Zählwerte, keine Inhalte von Exceptions oder Logs; die Details stehen in Application Insights. Der Health-Endpunkt muss ohne Token mit 200 antworten, deshalb trägt er `[AllowAnonymous]`. Jeder Health-Check startet die Function nach einer Ruhephase und schreibt deren Startmeldungen in die Logs; ein kürzerer Abstand meldet Ausfälle früher, kostet aber Freikontingent und Log-Volumen. Health-Check und Alarme kosten zusammen rund 1 Euro im Monat je Umgebung, Details und Entscheidungen im [Modul monitoring](https://github.com/blackforestsentinel/seed-terraform/tree/main/monitoring).
 
 Ohne `recipients` gibt es keine Alarme und kein Budget; Application Insights und das Tageslimit bleiben.
 
