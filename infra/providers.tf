@@ -31,6 +31,11 @@ provider "azurerm" {
     }
   }
   storage_use_azuread = true
+
+  # Seit azurerm 5 registriert der Provider keine Ressourcenanbieter mehr von selbst. Die Logic App
+  # des Health-Checks (Modul monitoring) braucht Microsoft.Logic, das in neuen Subscriptions oft
+  # fehlt. Ist er schon registriert, bleibt es bei einer Abfrage je Lauf.
+  resource_providers_to_register = ["Microsoft.Logic"]
 }
 
 provider "azapi" {}

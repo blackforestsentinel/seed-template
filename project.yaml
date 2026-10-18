@@ -92,6 +92,9 @@ monitoring:
   budget: {}
   # Alarm ab so vielen Exceptions in einer Stunde
   exceptionsPerHour: 5
+  # Abstand der Health-Checks auf /api/health in Stunden (1 bis 12). Jeder Aufruf startet die
+  # Function nach einer Ruhephase und schreibt Logs; seltener spart Freikontingent und Log-Kosten.
+  healthCheckHours: 4
   # Tageslimit für Logs in GB; danach nimmt Azure bis 0 Uhr UTC keine Telemetrie mehr an
   dailyCapGb: 1
 
