@@ -85,7 +85,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.12.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.13.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -109,7 +109,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.12.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.13.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -156,7 +156,7 @@ module "sso" {
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.12.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.13.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -169,6 +169,8 @@ module "monitoring" {
   alert_emails               = local.alert_recipients
   exception_threshold        = try(local.cfg.monitoring.exceptionsPerHour, null)
   health_check_url           = "${module.core.function_app_url}/api/health"
+  # Abstand in Stunden; ohne Angabe der Default des Moduls (4).
+  health_check_interval_hours = try(local.cfg.monitoring.healthCheckHours, null)
   # Betrag je Umgebung oder einer für alle; ohne Betrag kein Budget.
   budget_amount = try(tonumber(local.cfg.monitoring.budget), local.cfg.monitoring.budget[var.environment], null)
 }
@@ -176,7 +178,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.12.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.13.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
