@@ -44,7 +44,7 @@ npm run dev
 
 Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
 
-**Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Unter `auth.directory.people` stehen erfundene Personen für die Personen-Komponenten; ohne Graph zeigen Avatare Initialen, und die Personenauswahl sucht in dieser Liste. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
+**Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen und `AzureWebJobs.Settings.Disabled` entfernen. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Unter `auth.directory.people` stehen erfundene Personen für die Personen-Komponenten; ohne Graph zeigen Avatare Initialen, und die Personenauswahl sucht in dieser Liste. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
 
 Wer lokal gegen Entra ID testen will, entfernt `Auth__Mode`, trägt die Werte aus dem Terraform-Output der Umgebung `dev` ein (`Auth__TenantId`, `Auth__ClientId`, `Auth__Audience` in `local.settings.json`, `frontend_config` in `public/config.json`); `http://localhost:5173/` ist in `dev` als Redirect-URI eingetragen.
 
@@ -58,6 +58,20 @@ Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsof
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
 
+## Terraform
+
+`infra/` bindet die Module aus seed-terraform mit fester Version ein (`?ref=<version>`), `infra/providers.tf` pinnt die Provider azurerm, azapi und azuread auf exakte Versionen. Die Lock-Datei `infra/.terraform.lock.hcl` hält dazu die Prüfsummen der Provider-Pakete fest, für Linux und Windows (x64) und macOS (Intel und Apple Silicon). `terraform init` nimmt dann nur Pakete mit genau diesen Prüfsummen; ein ausgetauschtes Paket fällt auf, statt in Plan und Apply zu laufen. Die Datei gehört ins Repo.
+
+Nach einem Bump der Provider in `providers.tf` die Lock-Datei neu erzeugen und mit committen, sonst bricht `terraform init` ab, weil die Version nicht mehr zur Lock-Datei passt:
+
+```bash
+cd infra
+terraform init -backend=false -upgrade
+terraform providers lock -platform=linux_amd64 -platform=windows_amd64 -platform=darwin_arm64 -platform=darwin_amd64
+```
+
+Dasselbe gilt, wenn eine neue Version der Module einen weiteren Provider verlangt. Ein `terraform init` auf einer anderen Plattform ergänzt deren Prüfsummen in der Datei; solche Änderungen nicht committen oder die Plattform im Befehl oben ergänzen.
+
 ## Features
 
 `project.yaml` schaltet Features an oder aus, beim Start oder nachträglich. Der nächste Pipeline-Lauf ergänzt nur die neuen Ressourcen. Einzelne Umgebungen können abweichen, siehe [Einstellungen je Umgebung](#einstellungen-je-umgebung).
@@ -68,6 +82,8 @@ In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 
 - **Infrastruktur:** Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function (`Seed__Features__Sso`, `Auth__*`).
 - **API:** `Program.cs` schaltet `builder.UseSeedAuth()` über `Seed__Features__Sso` ein. Dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`. Fehlen bei eingeschaltetem sso die Auth-Settings, startet die App nicht.
+- **Ohne sso:** `[RequireCapability]` und `[RequireScope]` prüft nur die Token-Prüfung. Ist eine Function mit einem der Attribute ohne sso aufrufbar, startet die API deshalb nicht; die Meldung nennt die Function. Das Beispiel `Settings` schaltet `infra/main.tf` ohne sso per `AzureWebJobs.Settings.Disabled` ab (Liste `sso_example_functions`), lokal `local.settings.json`.
+- **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von Anwendungen an, die das Projekt kennt: Frontend (auch eine Browser-Erweiterung mit derselben Registrierung), Custom Connector und MCP-Clients. Eine fremde App, der jemand zugestimmt hat, bekommt 401. Weitere Anwendungen stehen mit ihrer Client-ID unter `auth.additionalClientIds` in `project.yaml`. Tokens von Diensten mit App-Rolle betrifft das nicht.
 - **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Wer nicht angemeldet ist, sieht die Anmeldeseite (`SignInPage`); wer schon einmal angemeldet war, kommt meist still über die Sitzung bei Entra ID herein. Läuft das Refresh-Token ab (nach 24 Stunden), erneuert es die Sitzung still: erst im unsichtbaren iframe über die Bridge-Seite `frontend/redirect.html`, sonst per Umleitung ohne Dialog. Die Redirect-URI der Bridge-Seite trägt Terraform ein.
 
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
@@ -215,7 +231,7 @@ claude mcp add --transport http --client-id <mcp_client_id> --callback-port 8080
 
 Danach in Claude Code `/mcp` → Server wählen → **Authenticate**. Der Port ist frei wählbar, Entra ignoriert ihn bei `http://localhost/callback`.
 
-**Andere Clients:** Jeder Client, der mit einem eigenen Entra-Token für die API und `mcp_access` kommt, wird angenommen; eine Liste zugelassener Clients gibt es nicht. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
+**Andere Clients:** Die API nimmt delegierte Tokens nur von zugelassenen Clients an: Frontend, Custom Connector, die MCP-Client-Registrierung und die vorautorisierten Clients (Standard VS Code). Ein anderer Client mit eigener Entra-Registrierung kommt mit seiner Client-ID in `auth.additionalClientIds` in `project.yaml` dazu, sonst antwortet die API mit 401. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
 
 **Fehlerbilder:** `AADSTS9010010` nach der Anmeldung: eigene Domain fehlt oder die URL im Client weicht von `mcp_url` ab. Einwilligungsdialog oder `AADSTS65001`: Administratorzustimmung fehlt. Werkzeug fehlt in der Liste: Der Person fehlt die Capability (Werkzeug `ueberblick_abrufen` zeigt Rollen und Berechtigungen). Conditional Access mit Standortbedingung: Claude holt und erneuert Tokens von Anthropics Adressen (`160.79.104.0/21`), nicht vom Rechner der Person.
 
@@ -384,7 +400,7 @@ environments:
 
 - **App-Settings:** Terraform setzt `settings` und `environments.<name>.settings` als App-Settings der Function; bei gleichem Namen gilt der Wert der Umgebung. Im Code liest `IConfiguration` sie wie jede andere Einstellung, `Beispiel__Zeitzone` als `Beispiel:Zeitzone`. Seed-eigene Settings gehen bei gleichem Namen vor: die der Features (`Seed__*`, `Auth__*`, `SeedStorage__*`, `Secrets__*`, `Mcp__*`) und die Grundeinstellungen der Function (`AzureWebJobsStorage__*`, `APPLICATIONINSIGHTS_*`, `AZURE_CLIENT_ID`).
 - **Werte sind Text.** Zahlen und `true`/`false` nimmt Terraform als Text an, aber YAML liest manches anders, als es dasteht: `007` wird `7`, `1.50` wird `1.5`, `on` und `yes` werden `true`. Solche Werte in Anführungszeichen setzen. Listen, Objekte und leere Werte (für leer `""` schreiben) hält der Plan mit einer Meldung auf.
-- **Features:** `environments.<name>.features` überschreibt einzelne Schalter aus `features`, etwa ohne Key Vault in `test`. Terraform und die Flags `Seed__Features__*` der API folgen dem Wert der Umgebung. Der Smoke-Test der Pipeline liest bisher nur `features`; `sso` deshalb nicht je Umgebung abschalten, sonst erwartet er auf `api/me` weiter eine 401.
+- **Features:** `environments.<name>.features` überschreibt einzelne Schalter aus `features`, etwa ohne Key Vault in `test`. Terraform und die Flags `Seed__Features__*` der API folgen dem Wert der Umgebung. Der Smoke-Test der Pipeline liest bisher nur `features`; `sso` deshalb nicht je Umgebung abschalten, sonst erwartet er auf `api/me` weiter eine 401. Ohne sso wäre die API in dieser Umgebung ohne Anmeldung erreichbar; Functions mit `[RequireCapability]` lassen sie dann nicht starten (siehe sso).
 - **Instanzen:** `maxInstances` begrenzt das Hochskalieren der Function (Flex Consumption erlaubt 1 bis 1000). Ohne Angabe gilt der Standard des Moduls `core`, 40.
 - **Domains und CORS:** `environments.<name>.hosting` ersetzt `customDomains` und `corsAllowedOrigins` aus `hosting`. Eine eigene Domain gehört zu genau einer Static Web App; steht sie unter `hosting`, versucht jede Umgebung, sie an ihre eigene zu hängen. Deshalb gehört sie meist unter die Umgebung, die sie bekommt. Tarif (`staticWebApp`) gilt für alle Umgebungen.
 - **MCP:** `environments.<name>.mcp` ersetzt einzelne Angaben aus `mcp`, etwa `customDomain`, denn auch die eigene Domain der Function gibt es nur einmal.

@@ -12,6 +12,12 @@ locals {
   sso      = try(local.features.sso, false)
   mcp      = try(local.features.mcp, false)
 
+  # Beispiel in api/Api/Settings mit [RequireCapability]. Ohne Token-Prüfung startet die API mit
+  # einer solchen Function nicht (Bfs.Seed.Functions.Core); ohne sso bleibt sie deshalb abgeschaltet.
+  # Wer weitere Functions mit [RequireCapability] oder [RequireScope] auch ohne sso ausliefert,
+  # nimmt sie hier auf.
+  sso_example_functions = ["Settings"]
+
   # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API). Gilt für alle
   # Umgebungen, wie frontend in azure-pipelines.yml.
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
@@ -85,7 +91,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.13.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.15.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -98,6 +104,7 @@ module "core" {
   app_settings = merge(concat(
     [local.project_settings],
     [{ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }],
+    [local.sso ? {} : { for f in local.sso_example_functions : "AzureWebJobs.${f}.Disabled" => "true" }],
     [local.storage_app_settings],
     [for m in module.sso : m.app_settings],
     [{ Seed__Features__KeyVault = tostring(local.key_vault) }],
@@ -109,7 +116,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.13.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.15.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -128,6 +135,8 @@ module "sso" {
 
   app_roles           = local.app_roles
   assignment_required = try(local.cfg.auth.assignmentRequired, false)
+  # Delegierte Tokens nimmt die API nur von zugelassenen Clients an; weitere aus project.yaml.
+  additional_allowed_client_ids = try(local.cfg.auth.additionalClientIds, [])
   existing_registration = local.auth_existing == null ? null : {
     tenant_id     = local.auth_existing.tenantId
     api_client_id = local.auth_existing.apiClientId
@@ -156,7 +165,7 @@ module "sso" {
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.13.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.15.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -178,7 +187,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.13.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.15.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project

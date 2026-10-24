@@ -61,6 +61,9 @@ auth:
   # Weitere Redirect-URIs der SPA ohne Bridge-Seite, etwa für eine Browser-Erweiterung (README,
   # „Browser-Erweiterungen“); meist je Umgebung:
   # extraRedirectUris: [https://<erweiterungs-id>.chromiumapp.org/]
+  # Weitere Anwendungen (Client-ID), deren delegierte Tokens die API annimmt, etwa eine andere App
+  # mit Admin-Zustimmung. Frontend, Custom Connector und MCP-Clients sind schon zugelassen.
+  # additionalClientIds: [00000000-0000-0000-0000-000000000000]
 
 # Nur mit features.mcp, alles optional:
 # mcp:
