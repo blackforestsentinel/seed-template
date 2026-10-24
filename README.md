@@ -58,6 +58,20 @@ Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsof
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
 
+## Terraform
+
+`infra/` bindet die Module aus seed-terraform mit fester Version ein (`?ref=<version>`), `infra/providers.tf` pinnt die Provider azurerm, azapi und azuread auf exakte Versionen. Die Lock-Datei `infra/.terraform.lock.hcl` hält dazu die Prüfsummen der Provider-Pakete fest, für Linux und Windows (x64) und macOS (Intel und Apple Silicon). `terraform init` nimmt dann nur Pakete mit genau diesen Prüfsummen; ein ausgetauschtes Paket fällt auf, statt in Plan und Apply zu laufen. Die Datei gehört ins Repo.
+
+Nach einem Bump der Provider in `providers.tf` die Lock-Datei neu erzeugen und mit committen, sonst bricht `terraform init` ab, weil die Version nicht mehr zur Lock-Datei passt:
+
+```bash
+cd infra
+terraform init -backend=false -upgrade
+terraform providers lock -platform=linux_amd64 -platform=windows_amd64 -platform=darwin_arm64 -platform=darwin_amd64
+```
+
+Dasselbe gilt, wenn eine neue Version der Module einen weiteren Provider verlangt. Ein `terraform init` auf einer anderen Plattform ergänzt deren Prüfsummen in der Datei; solche Änderungen nicht committen oder die Plattform im Befehl oben ergänzen.
+
 ## Features
 
 `project.yaml` schaltet Features an oder aus, beim Start oder nachträglich. Der nächste Pipeline-Lauf ergänzt nur die neuen Ressourcen. Einzelne Umgebungen können abweichen, siehe [Einstellungen je Umgebung](#einstellungen-je-umgebung).
@@ -69,6 +83,7 @@ In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
 - **Infrastruktur:** Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function (`Seed__Features__Sso`, `Auth__*`).
 - **API:** `Program.cs` schaltet `builder.UseSeedAuth()` über `Seed__Features__Sso` ein. Dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`. Fehlen bei eingeschaltetem sso die Auth-Settings, startet die App nicht.
 - **Ohne sso:** `[RequireCapability]` und `[RequireScope]` prüft nur die Token-Prüfung. Ist eine Function mit einem der Attribute ohne sso aufrufbar, startet die API deshalb nicht; die Meldung nennt die Function. Das Beispiel `Settings` schaltet `infra/main.tf` ohne sso per `AzureWebJobs.Settings.Disabled` ab (Liste `sso_example_functions`), lokal `local.settings.json`.
+- **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von Anwendungen an, die das Projekt kennt: Frontend (auch eine Browser-Erweiterung mit derselben Registrierung), Custom Connector und MCP-Clients. Eine fremde App, der jemand zugestimmt hat, bekommt 401. Weitere Anwendungen stehen mit ihrer Client-ID unter `auth.additionalClientIds` in `project.yaml`. Tokens von Diensten mit App-Rolle betrifft das nicht.
 - **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Wer nicht angemeldet ist, sieht die Anmeldeseite (`SignInPage`); wer schon einmal angemeldet war, kommt meist still über die Sitzung bei Entra ID herein. Läuft das Refresh-Token ab (nach 24 Stunden), erneuert es die Sitzung still: erst im unsichtbaren iframe über die Bridge-Seite `frontend/redirect.html`, sonst per Umleitung ohne Dialog. Die Redirect-URI der Bridge-Seite trägt Terraform ein.
 
 Voraussetzung im Tenant: Die Deployment-Identität hat die Graph-Berechtigung `Application.ReadWrite.OwnedBy` mit Admin-Consent (Tenant-Onboarding).
@@ -216,7 +231,7 @@ claude mcp add --transport http --client-id <mcp_client_id> --callback-port 8080
 
 Danach in Claude Code `/mcp` → Server wählen → **Authenticate**. Der Port ist frei wählbar, Entra ignoriert ihn bei `http://localhost/callback`.
 
-**Andere Clients:** Jeder Client, der mit einem eigenen Entra-Token für die API und `mcp_access` kommt, wird angenommen; eine Liste zugelassener Clients gibt es nicht. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
+**Andere Clients:** Die API nimmt delegierte Tokens nur von zugelassenen Clients an: Frontend, Custom Connector, die MCP-Client-Registrierung und die vorautorisierten Clients (Standard VS Code). Ein anderer Client mit eigener Entra-Registrierung kommt mit seiner Client-ID in `auth.additionalClientIds` in `project.yaml` dazu, sonst antwortet die API mit 401. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
 
 **Fehlerbilder:** `AADSTS9010010` nach der Anmeldung: eigene Domain fehlt oder die URL im Client weicht von `mcp_url` ab. Einwilligungsdialog oder `AADSTS65001`: Administratorzustimmung fehlt. Werkzeug fehlt in der Liste: Der Person fehlt die Capability (Werkzeug `ueberblick_abrufen` zeigt Rollen und Berechtigungen). Conditional Access mit Standortbedingung: Claude holt und erneuert Tokens von Anthropics Adressen (`160.79.104.0/21`), nicht vom Rechner der Person.
 
