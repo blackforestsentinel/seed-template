@@ -22,7 +22,9 @@ builder.AddSeedCore();
 // Fehlt der Wert noch, wirft Get() mit dem Namen des Secrets; die App startet trotzdem.
 
 // Feature sso aus project.yaml: Terraform setzt Seed__Features__Sso und die Auth-Settings.
-// Dann verlangt jede HTTP-Function ein Token; Ausnahmen markiert [AllowAnonymous].
+// Dann verlangt jede HTTP-Function ein Token; Ausnahmen markiert [AllowAnonymous]. Ohne sso
+// startet die API nicht, solange eine Function mit [RequireCapability] aufrufbar ist; das
+// Beispiel Settings schaltet infra/main.tf dann ab (lokal: local.settings.json).
 if (builder.Configuration.GetValue<bool>("Seed:Features:Sso"))
 {
     builder.UseSeedAuth();

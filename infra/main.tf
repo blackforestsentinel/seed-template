@@ -12,6 +12,12 @@ locals {
   sso      = try(local.features.sso, false)
   mcp      = try(local.features.mcp, false)
 
+  # Beispiel in api/Api/Settings mit [RequireCapability]. Ohne Token-Prüfung startet die API mit
+  # einer solchen Function nicht (Bfs.Seed.Functions.Core); ohne sso bleibt sie deshalb abgeschaltet.
+  # Wer weitere Functions mit [RequireCapability] oder [RequireScope] auch ohne sso ausliefert,
+  # nimmt sie hier auf.
+  sso_example_functions = ["Settings"]
+
   # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API). Gilt für alle
   # Umgebungen, wie frontend in azure-pipelines.yml.
   static_web_app = title(lower(try(local.cfg.hosting.staticWebApp, "Free")))
@@ -98,6 +104,7 @@ module "core" {
   app_settings = merge(concat(
     [local.project_settings],
     [{ Seed__Features__Sso = tostring(local.sso), Seed__Features__Mcp = tostring(local.mcp) }],
+    [local.sso ? {} : { for f in local.sso_example_functions : "AzureWebJobs.${f}.Disabled" => "true" }],
     [local.storage_app_settings],
     [for m in module.sso : m.app_settings],
     [{ Seed__Features__KeyVault = tostring(local.key_vault) }],

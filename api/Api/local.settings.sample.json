@@ -12,6 +12,7 @@
     "AzureWebJobs.CreateJob.Disabled": "true",
     "AzureWebJobs.GetJob.Disabled": "true",
     "AzureWebJobs.ProcessJob.Disabled": "true",
+    "AzureWebJobs.Settings.Disabled": "true",
     "Auth__Mode": "Local",
     "Auth__LocalUser__Roles__0": "Admin"
   },
