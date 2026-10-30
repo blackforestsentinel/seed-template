@@ -127,7 +127,7 @@ Terraform legt dann für diese Umgebung keine Registrierungen an; API und Fronte
 
 #### Personen und Profilbilder
 
-Für die Personen-Komponenten aus [`@blackforestsentinel/seed-web-people`](https://github.com/blackforestsentinel/seed-packages) (Profilbild, Benutzermenü, Personenauswahl, Teams-Status): Das Frontend lädt Fotos, Profile und Suchergebnisse mit dem Token der angemeldeten Person direkt aus Microsoft Graph. Die API ist nicht beteiligt, Fotos und Profildaten gehen nie an sie. In `project.yaml`:
+Für die Personen-Komponenten aus [`@blackforestsentinel/seed-web-people`](https://github.com/blackforestsentinel/seed-packages) (Profilbild, Benutzermenü, Personenauswahl, Teams-Status, auf Wunsch auch Anwendungen und verwaltete Identitäten): Das Frontend lädt Fotos, Profile und Suchergebnisse mit dem Token der angemeldeten Person direkt aus Microsoft Graph. Die API ist nicht beteiligt, Fotos und Profildaten gehen nie an sie. In `project.yaml`:
 
 ```yaml
 auth:
@@ -135,6 +135,7 @@ auth:
     enabled: true       # Fotos, Profile, Suche
     presence: true      # Teams-Status
     roleFilter: false   # Personenauswahl nur mit App-Rolle (Administratorzustimmung nötig)
+    servicePrincipals: false   # auch Anwendungen und verwaltete Identitäten (Administratorzustimmung nötig)
 ```
 
 - **Infrastruktur:** Terraform trägt an der App-Registrierung des Frontends (`<projekt>-<umgebung>-web`) delegierte Berechtigungen für Microsoft Graph ein; der Plan zeigt dafür eine Änderung an der Registrierung und wartet auf die Infrastruktur-Freigabe. `config.json` bekommt unter `auth` den Teil `directory` mit den Scopes und der Client-ID der API.
@@ -146,16 +147,17 @@ auth:
 | `enabled` | `User.Read`, `User.ReadBasic.All`, `People.Read` | eigenes Profil, andere Personen und ihre Fotos, Suche, relevante Personen | Personen selbst, soweit der Tenant es zulässt, sonst Admin |
 | `presence` | `Presence.Read.All` | Teams-Status | wie oben |
 | `roleFilter` | `Application.Read.All`, `GroupMember.Read.All` | wer der API über eine App-Rolle zugewiesen ist, auch über Gruppen | immer Admin |
+| `servicePrincipals` | `Application.Read.All` | Anwendungen und verwaltete Identitäten in der Personenauswahl (`principalTypes`) und in Labels und Karten | immer Admin |
 
 Delegiert heißt: Das Frontend sieht nur, was die angemeldete Person auch in Outlook und Teams sieht, und Einstellungen des Tenants wie ausgeblendete Fotos gelten weiter.
 
 **Einmal je Umgebung von Hand zustimmen.** Die Pipeline darf keine Einwilligung erteilen. Nach dem Apply im Entra Admin Center → App-Registrierungen → `<projekt>-<umgebung>-web` → **API-Berechtigungen** → **Administratorzustimmung für „&lt;Tenant&gt;“ erteilen**, oder als Admin `az ad app permission admin-consent --id <spa-client-id>`. Der Terraform-Output `directory_permissions` am Ende des Apply-Logs nennt Client-ID, Berechtigungen und den Befehl.
 
 - Ohne Administratorzustimmung bekommt das Frontend nur dann ein Token für Graph, wenn die Personen selbst zustimmen dürfen. Viele Tenants erlauben das nur für Berechtigungen mit „geringem Risiko“, oft nur `User.Read`; dann ist die Administratorzustimmung nötig, oder ein Admin stuft `User.ReadBasic.All`, `People.Read` und `Presence.Read.All` unter Unternehmensanwendungen → Einwilligung und Berechtigungen → **Berechtigungsklassifizierungen** als geringes Risiko ein (gilt für alle Apps im Tenant).
-- Kommen `presence` oder `roleFilter` später dazu, erneut zustimmen; eine Zustimmung deckt nur die Berechtigungen ab, die beim Klick eingetragen waren.
+- Kommen `presence`, `roleFilter` oder `servicePrincipals` später dazu, erneut zustimmen; eine Zustimmung deckt nur die Berechtigungen ab, die beim Klick eingetragen waren.
 - Abschalten entfernt die Berechtigungen aus der Registrierung und `directory` aus `config.json`. Eine erteilte Zustimmung bleibt, bis ein Admin sie an der Enterprise App unter **Berechtigungen** widerruft.
 
-**Je Umgebung:** `environments.<name>.auth.directory` überschreibt einzelne Schalter, etwa aus in `prod`, solange dort noch niemand zugestimmt hat. `enabled` ist der Hauptschalter; `enabled: false` schaltet auch `presence` und `roleFilter` ab:
+**Je Umgebung:** `environments.<name>.auth.directory` überschreibt einzelne Schalter, etwa aus in `prod`, solange dort noch niemand zugestimmt hat. `enabled` ist der Hauptschalter; `enabled: false` schaltet auch `presence`, `roleFilter` und `servicePrincipals` ab:
 
 ```yaml
 environments:

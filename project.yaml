@@ -50,6 +50,7 @@ auth:
   #   enabled: true       # Fotos, Profile, Suche: User.Read, User.ReadBasic.All, People.Read
   #   presence: true      # Teams-Status: Presence.Read.All
   #   roleFilter: false   # Auswahl nur mit App-Rolle: Application.Read.All, GroupMember.Read.All (Admin-Consent!)
+  #   servicePrincipals: false   # auch Anwendungen und verwaltete Identitäten: Application.Read.All (Admin-Consent!)
   # Vorhandene App-Registrierung je Umgebung statt neuer, auch aus einem anderen Tenant.
   # Was der Admin dort einrichtet: README von seed-terraform, Modul sso.
   # existingRegistration:
