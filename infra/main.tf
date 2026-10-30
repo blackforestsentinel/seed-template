@@ -71,7 +71,7 @@ locals {
   # Umgebung, deren Tenant noch nicht zugestimmt hat. Kein Objekt oder unbekannte Schlüssel hält
   # die Prüfung am Output frontend_config auf.
   directory         = try(merge(try(local.cfg.auth.directory, {}), try(local.env.auth.directory, {})), null)
-  directory_unknown = try(setsubtract(keys(local.directory), ["enabled", "presence", "roleFilter"]), [])
+  directory_unknown = try(setsubtract(keys(local.directory), ["enabled", "presence", "roleFilter", "servicePrincipals"]), [])
   # Weitere Redirect-URIs der SPA ohne Bridge-Seite, etwa einer Browser-Erweiterung:
   # auth.extraRedirectUris, ersetzt aus environments.<name>.auth.extraRedirectUris, denn entpackte
   # Erweiterung und Store-Version haben verschiedene IDs. Eine einzelne URI statt einer Liste ist
@@ -91,7 +91,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.15.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.16.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -116,7 +116,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.15.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.16.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -148,9 +148,10 @@ module "sso" {
   # Personen-Komponenten (seed-web-people): delegierte Graph-Berechtigungen an der SPA und
   # auth.directory in config.json. Die Zustimmung erteilt ein Admin von Hand (README).
   directory = {
-    enabled     = try(local.directory.enabled, false)
-    presence    = try(local.directory.presence, false)
-    role_filter = try(local.directory.roleFilter, false)
+    enabled            = try(local.directory.enabled, false)
+    presence           = try(local.directory.presence, false)
+    role_filter        = try(local.directory.roleFilter, false)
+    service_principals = try(local.directory.servicePrincipals, false)
   }
 
   # MCP-Server (setzt sso voraus): Scope mcp_access, Client-Registrierung für MCP-Clients und
@@ -165,7 +166,7 @@ module "sso" {
 }
 
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.15.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.16.0"
   count  = length(local.alert_recipients) > 0 ? 1 : 0
 
   name                       = local.cfg.project
@@ -187,7 +188,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.15.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.16.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project

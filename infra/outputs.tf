@@ -57,7 +57,7 @@ output "frontend_config" {
 
   precondition {
     condition     = length(local.directory_unknown) == 0
-    error_message = "auth.directory in project.yaml: ${join(", ", local.directory_unknown)} unbekannt; erlaubt sind enabled, presence und roleFilter."
+    error_message = "auth.directory in project.yaml: ${join(", ", local.directory_unknown)} unbekannt; erlaubt sind enabled, presence, roleFilter und servicePrincipals."
   }
 
   precondition {
