@@ -30,6 +30,7 @@ const localConfig: SeedLocalAuthConfig = {
     people: [
       { id: 'p1', displayName: 'Erika Mustermann', department: 'Buchhaltung' },
       { id: 'p2', displayName: 'Max Mustermann', department: 'IT' },
+      { id: 'a1', displayName: 'Nachtlauf', kind: 'servicePrincipal', servicePrincipalType: 'ManagedIdentity' },
     ],
   },
 };
@@ -102,13 +103,18 @@ describe('App', () => {
     expect(screen.queryByText('Willkommen')).toBeNull();
   });
 
-  it('sucht auf der Seite Personen in den Personen aus config.json', async () => {
+  it('sucht auf der Seite Personen in den Personen und Anwendungen aus config.json', async () => {
     renderApp({ user: admin, config: localConfig, path: '/personen' });
+    const picker = screen.getByRole('combobox', { name: 'Personen oder Anwendungen auswählen' });
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Personen auswählen' }), { target: { value: 'max' } });
+    fireEvent.change(picker, { target: { value: 'max' } });
     fireEvent.click(await screen.findByRole('option', { name: /Max Mustermann/ }));
-
     expect(screen.getByRole('button', { name: 'Max Mustermann entfernen' })).toBeTruthy();
     expect(screen.getByText('IT')).toBeTruthy();
+
+    fireEvent.change(picker, { target: { value: 'nacht' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Nachtlauf/ }));
+    expect(screen.getByRole('button', { name: 'Nachtlauf entfernen' })).toBeTruthy();
+    expect(screen.getByText('Verwaltete Identität')).toBeTruthy();
   });
 });

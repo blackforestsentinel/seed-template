@@ -32,6 +32,13 @@
           "mail": "jonas.platzhalter@example.org",
           "jobTitle": "Werkstudent",
           "department": "IT"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Nachtlauf",
+          "kind": "servicePrincipal",
+          "servicePrincipalType": "ManagedIdentity",
+          "appId": "00000000-0000-4000-8000-000000000201"
         }
       ]
     }
