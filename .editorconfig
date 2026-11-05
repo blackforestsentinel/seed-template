@@ -148,8 +148,3 @@ dotnet_diagnostic.CA1848.severity = suggestion
 [api/*.Tests/**.cs]
 # Testnamen nach dem Muster Methode_Fall_Erwartung.
 dotnet_diagnostic.CA1707.severity = none
-
-[api/**/obj/**.cs]
-# Code, den Werkzeuge beim Build erzeugen (etwa der Einstiegspunkt der Tests von xunit), ist nicht
-# Code des Projekts; er darf GetAwaiter().GetResult() nutzen.
-dotnet_diagnostic.RS0030.severity = none

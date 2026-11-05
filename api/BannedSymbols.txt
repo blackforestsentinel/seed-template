@@ -23,8 +23,8 @@ M:System.Threading.Tasks.Task.Wait(System.Int32);Blockiert den Thread und kann s
 M:System.Threading.Tasks.Task.Wait(System.TimeSpan);Blockiert den Thread und kann sich verklemmen: await nutzen, mit Timeout per WaitAsync().
 M:System.Threading.Tasks.Task.Wait(System.Threading.CancellationToken);Blockiert den Thread und kann sich verklemmen: await nutzen.
 P:System.Threading.Tasks.Task`1.Result;Blockiert den Thread und kann sich verklemmen: await nutzen.
-M:System.Runtime.CompilerServices.TaskAwaiter.GetResult;Blockiert den Thread (GetAwaiter().GetResult()): await nutzen.
-M:System.Runtime.CompilerServices.TaskAwaiter`1.GetResult;Blockiert den Thread (GetAwaiter().GetResult()): await nutzen.
+// GetAwaiter().GetResult() blockiert genauso, steht aber nicht hier: Der Einstiegspunkt, den xunit
+// beim Build erzeugt, nutzt es, und RS0030 prüft auch erzeugten Code.
 
 // Konfiguration und Ausgabe
 M:System.Environment.GetEnvironmentVariable(System.String);Umgeht Konfiguration und Tests: IConfiguration oder IOptions<T> nutzen; App-Settings aus project.yaml kommen dort an.
