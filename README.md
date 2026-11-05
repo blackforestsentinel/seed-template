@@ -13,14 +13,15 @@ Dünnes Template für Web-Apps aus Azure Static Web App (React) und Azure Functi
 ├── frontend/             React, React Router, React Query (Vite)
 ├── api/                  Azure Function, dotnet-isolated, mit Tests
 ├── infra/                Terraform, zieht Module aus seed-terraform
-└── azure-pipelines.yml   extends auf seed-pipelines
+├── azure-pipelines.yml   extends auf seed-pipelines
+└── AGENTS.md             Regeln für Coding-Agents; CLAUDE.md und .claude/ für Claude Code
 ```
 
 ## Neues Projekt starten
 
 **Einmal pro Kunde (Tenant und Azure-DevOps-Projekt):** Das Onboarding-Skript aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines) richtet Deployment-Identität, Rechte, Terraform-State, Service Connections und die Pipeline `seed-scaffold` ein. Danach einmalig einen PAT als geheime Variable `SeedScaffoldPat` an `seed-scaffold` hinterlegen (siehe dortige README).
 
-**Je Projekt:** Pipeline `seed-scaffold` starten und Name, Features, Frontend (ja oder nur API), Umgebungen und Freigebende angeben. Sie legt das Repo aus diesem Template an, schreibt `project.yaml` und `azure-pipelines.yml`, legt Environments mit Freigaben und die Pipeline an und startet den ersten Lauf. Darin gibt eine Administratorin oder ein Administrator einmal die Azure-Service-Connection frei („Permit“) und danach die Infrastruktur („Approve“).
+**Je Projekt:** Pipeline `seed-scaffold` starten und Name, Features, Frontend (ja oder nur API), Umgebungen und Freigebende angeben. Sie legt das Repo aus diesem Template an, schreibt `project.yaml` und `azure-pipelines.yml`, legt Environments mit Freigaben und die Pipeline an und startet den ersten Lauf. Darin gibt eine Administratorin oder ein Administrator einmal die Azure-Service-Connection frei („Permit“) und danach die Infrastruktur („Approve“). Danach in `project.yaml` unter `owner` die Adresse des verantwortlichen Teams eintragen.
 
 Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infrastruktur ändert, wartet sie auf die Freigabe und wendet den Plan an. Danach deployt sie Function und Frontend und prüft beides per Smoke-Test.
 
@@ -28,7 +29,7 @@ Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infr
 
 ## Lokal entwickeln
 
-Voraussetzungen: .NET SDK 10, Node 24, Azure Functions Core Tools 4.
+Voraussetzungen: .NET SDK 10, Node 24 (Frontend und Hooks für Claude Code), Azure Functions Core Tools 4.
 
 ```bash
 # API auf http://localhost:7071
@@ -42,7 +43,7 @@ npm install
 npm run dev
 ```
 
-Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
+Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`. Vor dem Commit außerdem `dotnet build api/Api.slnx -warnaserror` und `dotnet format api/Api.slnx`, siehe [Regeln und Prüfungen](#regeln-und-prüfungen).
 
 **Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen und `AzureWebJobs.Settings.Disabled` entfernen. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Unter `auth.directory.people` stehen erfundene Personen und eine Anwendung (`"kind": "servicePrincipal"`) für die Personen-Komponenten; ohne Graph zeigen Avatare Initialen, und die Personenauswahl sucht in dieser Liste. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
 
@@ -57,6 +58,35 @@ Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsof
 - **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
+
+## Endpunkte
+
+Die Tabelle zwischen den Markern entsteht aus dem OpenAPI-Dokument der API (`Bfs.Seed.OpenApi`). Nicht von Hand ändern, sonst laufen Doku und Code auseinander.
+
+<!-- seed:endpoints:start -->
+<!-- seed:endpoints:end -->
+
+## Regeln und Prüfungen
+
+Viele Projekte entstehen mit Coding-Agents. Deshalb setzt der Build die Regeln durch, statt sie nur zu beschreiben. Ausnahmen gibt es, aber nur mit einer Begründung, die im Pull Request steht.
+
+- **Warnungen als Fehler:** Compiler-, Nullable-, Analyzer- und Stilwarnungen brechen in der Pipeline den Build (Parameter `treatWarningsAsErrors` von seed-pipelines, Standard an). Lokal prüft `dotnet build api/Api.slnx -warnaserror` dasselbe; fest eingestellt ist es lokal nicht, damit eine Warnung nicht schon `func start` aufhält. Die Regeln stehen in `api/Directory.Build.props` (Nullable, `AnalysisLevel` 10.0-recommended, `EnforceCodeStyleInBuild`) und in `.editorconfig` (Stil und Namen wie im bestehenden Code); dort abgeschwächte Regeln stehen mit Grund.
+- **Format:** `dotnet format api/Api.slnx` vor dem Commit; die Pipeline prüft mit `--verify-no-changes`.
+- **Verbotene APIs:** `api/BannedSymbols.txt` sperrt etwa `DateTime.Now`, `TimeZoneInfo.Local`, `new HttpClient()`, `Thread.Sleep`, `.Result`, `Environment.GetEnvironmentVariable` und `Console`. Der Fehler RS0030 nennt die Alternative, etwa `TimeProvider` oder `IHttpClientFactory`. Eine Ausnahme geht nur am Aufruf: `[SuppressMessage("ApiDesign", "RS0030", Justification = "…")]`.
+- **Rechte je Function:** Jede HTTP-Function verlangt mit `[RequireCapability]` eine Capability. `[RequireAnyRole]` gibt sie ausdrücklich jeder Rolle frei, `[AllowAnonymous]` ohne Token; beides nur mit Grund. Ohne Token erreichbar ist nur `/api/health`.
+- **Pakete:** Vorabversionen von NuGet-Paketen und bekannte Sicherheitslücken der Stufen hoch und kritisch brechen den Build, außer sie stehen mit Begründung unter `build` in `project.yaml`:
+
+  ```yaml
+  build:
+    prereleasePackages:
+      - name: Some.Package          # NuGet-Paket-ID
+        reason: Behebt einen Fehler, den das Projekt braucht
+    ignoreAdvisories:
+      - id: GHSA-xxxx-xxxx-xxxx
+        reason: Die betroffene Funktion nutzt das Projekt nicht
+  ```
+- **Besitzer:** `owner` in `project.yaml`, die Adresse eines Teams oder Verteilers, wird Tag an allen Ressourcen und Ansprechpartner in Alarmen.
+- **Coding-Agents:** `AGENTS.md` fasst die Regeln für Coding-Agents zusammen; `CLAUDE.md` bindet sie für Claude Code ein. `.claude/settings.json` startet zwei Hooks (Node-Skripte in `.claude/hooks/`): Nach Änderungen unter `api/` oder `frontend/` laufen Build, Tests und Formatprüfung, bevor Claude eine Antwort beendet, und Fehler gehen an Claude zurück. Ein grüner Stand läuft nicht noch einmal. Beim Start einer Sitzung vergleicht ein Hook die Seed-Versionen mit dem neuesten Release und schlägt das Update vor; ohne Netz bleibt er still. Persönliche Einstellungen gehören in `.claude/settings.local.json`, die nicht eingecheckt wird.
 
 ## Terraform
 
@@ -372,6 +402,8 @@ Das Dokument entsteht bei jedem Build unter `api/Api/bin/<Konfiguration>/net10.0
 - `displayName`: Name in der Power Platform, höchstens 30 Zeichen aus Buchstaben ohne Umlaute, Ziffern, Leerzeichen, `-` und `_` (Standard: `<project> <umgebung>`); anderes lehnt die Power Platform ab, der Plan prüft es vorher.
 - `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API.
 - `iconBrandColor`: Farbe des Symbols, Standard `#007ee5`.
+
+**Breaking Changes:** Vor dem Deploy vergleicht die Pipeline die Operationen mit dem bisherigen Connector und sucht Flows, die eine entfernte oder unverträglich geänderte Operation nutzen; dann endet der Lauf, bevor sich etwas ändert (README von seed-pipelines). Ist das gewollt, etwa weil der betroffene Flow ohnehin abgeschaltet wird: Pipeline von Hand starten und „Breaking Changes am Custom Connector zulassen“ ankreuzen, dann werden die Fehler zu Warnungen. Ob die Konten der Verbindungen eine Rolle aus `auth.roles` haben, prüft die Pipeline nur mit `checkConnectorConnections: true` in `azure-pipelines.yml`; dafür braucht die Pipeline-Identität weitere Rechte.
 
 **Abschalten:** `customConnector: false` entfernt die Client-Registrierung; Verbindungen funktionieren dann nicht mehr. Den Connector selbst löscht die Pipeline nicht, das geht in Power Automate unter **Benutzerdefinierte Connectors**.
 
