@@ -246,7 +246,6 @@ function hash(value) {
 
 // Letzte Zeilen der Ausgabe, ohne Farbcodes; Fehler stehen bei dotnet und vitest am Ende.
 function tail(text) {
-  // eslint-disable-next-line no-control-regex
   const lines = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\r/g, '').split('\n');
   let out = lines.slice(-MAX_LINES).join('\n');
   if (out.length > MAX_CHARS) {
