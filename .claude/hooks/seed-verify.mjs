@@ -93,6 +93,9 @@ function api() {
 
   const sln = `api/${solution}`;
   const artifacts = join(workDir, 'artifacts');
+  // Warnungen als Fehler wie in der Pipeline (web-app.yml, treatWarningsAsErrors): außer denen von
+  // NuGet, die vom Netz abhängen oder Lücken melden; die prüft die Pipeline gesondert.
+  const notAsError = '-warnNotAsError:NU1603,NU1608,NU1801,NU1900,NU1901,NU1902,NU1903,NU1904,NU1905,MSB3026';
   return {
     name: 'API',
     // project.yaml liegt in der Build-Ausgabe (Rollen), .editorconfig und global.json steuern den Build.
@@ -100,7 +103,7 @@ function api() {
     steps: [
       {
         command: `dotnet build ${sln} -warnaserror`,
-        run: () => exec('dotnet', ['build', sln, '-warnaserror', '-nologo', '-tl:off', '-clp:ErrorsOnly;NoSummary', '--artifacts-path', artifacts]),
+        run: () => exec('dotnet', ['build', sln, '-warnaserror', notAsError, '-nologo', '-tl:off', '-clp:ErrorsOnly;NoSummary', '--artifacts-path', artifacts]),
       },
       {
         command: `dotnet test --solution ${sln}`,

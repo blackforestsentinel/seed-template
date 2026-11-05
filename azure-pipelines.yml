@@ -24,10 +24,11 @@ parameters:
 
 resources:
   repositories:
+    # Der Name seed ist fest: Die Pipeline liest darüber ihre eigenen Skripte und Versionen.
     - repository: seed
       type: github
       name: blackforestsentinel/seed-pipelines
-      ref: refs/tags/v0.15.0
+      ref: refs/tags/v0.17.0
       # GitHub-Service-Connection der Azure-DevOps-Organisation (nur Lesezugriff nötig)
       endpoint: github-blackforestsentinel
 
@@ -44,6 +45,9 @@ extends:
       storageAccount: stterraformstate
       container: tfstate
     confirmDataDeletion: ${{ parameters.confirmDataDeletion }}
+    # Warnungen von Compiler, Analyzern und MSBuild brechen den Build (Standard). Abschalten nur
+    # vorübergehend und mit Begründung im PR:
+    # treatWarningsAsErrors: false
     allowBreakingConnectorChanges: ${{ parameters.allowBreakingConnectorChanges }}
     # Nur mit features.customConnector, Opt-in: prüft, ob die Konten der Verbindungen zum Connector
     # eine Rolle aus auth.roles haben, und warnt sonst. Die Pipeline-Identität braucht dafür
