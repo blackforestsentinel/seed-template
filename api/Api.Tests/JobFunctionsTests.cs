@@ -145,7 +145,7 @@ public class JobFunctionsTests
             Task.FromResult(Rows.Remove((entity.PartitionKey, entity.RowKey)));
 
         public IAsyncEnumerable<JobStatus> QueryPartitionAsync(string partitionKey, CancellationToken cancellationToken = default) =>
-            Query(Rows.Values.Where(j => j.PartitionKey == partitionKey));
+            Query(Rows.Values.Where(j => j.PartitionKey == partitionKey), cancellationToken);
 
         public IAsyncEnumerable<JobStatus> QueryAsync(string? filter, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

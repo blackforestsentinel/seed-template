@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Gilt für alle Projekte unter api/. Stil und Namen stehen in .editorconfig im Wurzelordner.
+
+    Warnungen als Fehler setzt die Pipeline (Parameter treatWarningsAsErrors von seed-pipelines,
+    Standard true), nicht diese Datei: Ein fester Wert hier würde den Schalter der Pipeline
+    übergehen, und lokal soll eine Warnung nicht schon func start oder das Debuggen aufhalten.
+    Vor dem Commit prüft dotnet build -warnaserror dasselbe wie die Pipeline (AGENTS.md); der
+    Stop-Hook in .claude/settings.json tut das für Claude Code.
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <!-- Regeln der Code-Analyse von .NET 10 im Satz recommended. Fest auf 10.0 statt latest,
+         damit ein neueres SDK keine neuen Regeln mitbringt, die den Build brechen. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- Stilregeln aus .editorconfig mit Schwere warning gelten auch im Build, nicht nur in der IDE. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- Verbotene APIs mit Begründung und Alternative: BannedSymbols.txt, gemeldet als RS0030 (Fehler). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+
+</Project>
