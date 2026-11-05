@@ -44,7 +44,7 @@ auth:
       description: Verwaltet die Anwendung
       # User (Personen und Gruppen), Application (Dienste ohne angemeldete Person) oder beide
       memberTypes: [User]
-      capabilities: [settings.manage, status.read]
+      capabilities: [settings.manage, status.read, jobs.run]
   # Zuweisung erforderlich (Standard): Nur Personen, Gruppen und Anwendungen, denen ein Admin in
   # Entra eine Rolle zugewiesen hat, bekommen ein Token; bis dahin kommt niemand herein. Mit false
   # bekommt jedes Konto des Tenants eines: Functions mit [RequireCapability] lehnen es ohne Rolle

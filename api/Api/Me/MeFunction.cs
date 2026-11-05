@@ -10,6 +10,9 @@ namespace Api.Me;
 /// Angemeldete Person mit Rollen und Capabilities. Das Frontend blendet damit UI-Elemente ein oder
 /// aus, ohne zu wissen, welche Rolle was darf; das steht nur in project.yaml (auth.roles).
 /// </summary>
+// Auch ohne Rolle erreichbar: Daran erkennt das Frontend, dass jemand keine Rolle hat, und zeigt
+// „Kein Zugriff“ statt eines Fehlers. Ein Token verlangt die API weiter.
+[AllowWithoutRole]
 public sealed class MeFunction
 {
     [Function("Me")]

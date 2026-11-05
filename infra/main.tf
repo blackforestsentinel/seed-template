@@ -12,11 +12,12 @@ locals {
   sso      = try(local.features.sso, false)
   mcp      = try(local.features.mcp, false)
 
-  # Beispiel in api/Api/Settings mit [RequireCapability]. Ohne Token-Prüfung startet die API mit
-  # einer solchen Function nicht (Bfs.Seed.Functions.Core); ohne sso bleibt sie deshalb abgeschaltet.
-  # Wer weitere Functions mit [RequireCapability] oder [RequireScope] auch ohne sso ausliefert,
-  # nimmt sie hier auf.
-  sso_example_functions = ["Settings"]
+  # Beispiele in api/Api, die eine Anmeldung verlangen: Settings und die Jobs mit
+  # [RequireCapability], Me mit [AllowWithoutRole]. Ohne Token-Prüfung startet die API mit einer
+  # solchen Function nicht (Bfs.Seed.Functions.Core); ohne sso bleiben sie deshalb abgeschaltet.
+  # Wer weitere Functions mit [RequireCapability], [RequireAnyRole], [AllowWithoutRole] oder
+  # [RequireScope] auch ohne sso ausliefert, nimmt sie hier auf.
+  sso_example_functions = ["Settings", "Me", "CreateJob", "GetJob"]
 
   # Tarif der Static Web App: Free, Standard oder None (kein Frontend, nur API). Gilt für alle
   # Umgebungen, wie frontend in azure-pipelines.yml.

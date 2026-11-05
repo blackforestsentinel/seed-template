@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Security.Claims;
+using Api.Jobs;
 using Api.Me;
 using Bfs.Seed.Auth;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +17,23 @@ public class AuthTests
         var map = SeedCapabilityMap.Load(Path.Combine(AppContext.BaseDirectory, "project.yaml"));
 
         Assert.Empty(SeedCapabilityCheck.FindUnknownCapabilities(map, typeof(MeFunction).Assembly));
+    }
+
+    [Fact]
+    public void Me_IsReachableWithoutRole()
+    {
+        // Das Frontend zeigt „Kein Zugriff“ nur, wenn GET /api/me auch ohne Rolle mit 200 antwortet.
+        Assert.NotNull(typeof(MeFunction).GetCustomAttribute<AllowWithoutRoleAttribute>());
+    }
+
+    [Theory]
+    [InlineData(nameof(JobFunctions.Create))]
+    [InlineData(nameof(JobFunctions.Get))]
+    public void Jobs_RequireRunCapability(string method)
+    {
+        var attribute = typeof(JobFunctions).GetMethod(method)!.GetCustomAttribute<RequireCapabilityAttribute>();
+
+        Assert.Equal(JobFunctions.RunCapability, attribute?.Capability);
     }
 
     [Fact]

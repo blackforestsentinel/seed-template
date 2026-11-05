@@ -64,6 +64,15 @@ Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Proj
 Die Tabelle zwischen den Markern entsteht aus dem OpenAPI-Dokument der API (`Bfs.Seed.OpenApi`). Nicht von Hand ändern, sonst laufen Doku und Code auseinander.
 
 <!-- seed:endpoints:start -->
+
+| Methode | Pfad | operationId | Zusammenfassung | Capability | Deprecated |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/api/health` | `GetHealth` | Status der API abrufen | anonym |  |
+| POST | `/api/jobs` | `CreateJob` | Job anlegen | `jobs.run` |  |
+| GET | `/api/jobs/{id}` | `GetJob` | Job abrufen | `jobs.run` |  |
+| GET | `/api/me` | `GetMe` | Angemeldete Person abrufen | ohne Rolle |  |
+| GET | `/api/settings` | `GetSettings` | Einstellungen abrufen | `settings.manage` |  |
+
 <!-- seed:endpoints:end -->
 
 ## Regeln und Prüfungen

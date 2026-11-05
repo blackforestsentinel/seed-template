@@ -6,19 +6,22 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Api</RootNamespace>
+    <!-- Endpunkt-Tabelle zwischen den Markern seed:endpoints in der README (Bfs.Seed.OpenApi):
+         lokal schreibt der Build sie, in der Pipeline warnt er, wenn sie veraltet ist. -->
+    <SeedOpenApiReadme>..\..\README.md</SeedOpenApiReadme>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Bfs.Seed.Auth" Version="0.9.0" />
-    <PackageReference Include="Bfs.Seed.Functions.Core" Version="0.9.0" />
-    <PackageReference Include="Bfs.Seed.Mcp" Version="0.9.0" />
-    <PackageReference Include="Bfs.Seed.OpenApi" Version="0.9.0" />
-    <PackageReference Include="Bfs.Seed.Storage" Version="0.9.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.4" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+    <PackageReference Include="Bfs.Seed.Auth" Version="0.10.0" />
+    <PackageReference Include="Bfs.Seed.Functions.Core" Version="0.10.0" />
+    <PackageReference Include="Bfs.Seed.Mcp" Version="0.10.0" />
+    <PackageReference Include="Bfs.Seed.OpenApi" Version="0.10.0" />
+    <PackageReference Include="Bfs.Seed.Storage" Version="0.10.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.1" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.5" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
   </ItemGroup>
 
   <ItemGroup>
