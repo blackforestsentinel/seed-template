@@ -16,7 +16,7 @@ trim_trailing_whitespace = true
 # Zwei Leerzeichen am Zeilenende sind in Markdown ein Zeilenumbruch.
 trim_trailing_whitespace = false
 
-[*.{cs,csx,csproj,props,targets,slnx}]
+[*.{cs,csx}]
 indent_size = 4
 
 [*.cs]
