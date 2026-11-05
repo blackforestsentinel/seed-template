@@ -1,6 +1,11 @@
 # Einzige Wahrheit über Projekt und Features. Terraform und Pipeline lesen diese Datei.
 project: my-app
 
+# Besitzer des Projekts: E-Mail-Adresse eines Teams oder Verteilers, z. B. team@example.org.
+# Terraform setzt sie als Tag owner an alle Ressourcen, Alarme nennen sie als Ansprechpartner.
+# TODO(onboarding): Adresse eintragen.
+owner: ""
+
 features:
   # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false
@@ -40,8 +45,11 @@ auth:
       # User (Personen und Gruppen), Application (Dienste ohne angemeldete Person) oder beide
       memberTypes: [User]
       capabilities: [settings.manage, status.read]
-  # Zuweisung erforderlich: Nur Personen und Anwendungen mit einer Rolle bekommen ein Token.
-  assignmentRequired: false
+  # Zuweisung erforderlich (Standard): Nur Personen, Gruppen und Anwendungen, denen ein Admin in
+  # Entra eine Rolle zugewiesen hat, bekommen ein Token; bis dahin kommt niemand herein. Mit false
+  # bekommt jedes Konto des Tenants eines: Functions mit [RequireCapability] lehnen es ohne Rolle
+  # ab, alle anderen nicht.
+  assignmentRequired: true
   # Personen-Komponenten im Frontend (seed-web-people): Profilbilder, Personensuche und
   # Teams-Status kommen mit dem Token der angemeldeten Person direkt aus Microsoft Graph.
   # Terraform trägt die Berechtigungen an der App-Registrierung des Frontends ein, zustimmen muss
@@ -142,6 +150,18 @@ storage:
 # Repo, Secrets gehören in keyVault.
 # settings:
 #   Beispiel__Zeitzone: Europe/Berlin
+
+# Ausnahmen von den Prüfungen im Build der Pipeline, jede nur mit Begründung (reason). Sie steht so
+# im Pull Request und im Log. Beispiel:
+# build:
+#   # Vorabversion eines NuGet-Pakets (Paket-ID); ohne Eintrag bricht der Build ab
+#   prereleasePackages:
+#     - name: Some.Package
+#       reason: Behebt einen Fehler, den das Projekt braucht; die stabile Version fehlt noch
+#   # Bekannte Sicherheitslücke in einem Paket bewusst hinnehmen (ID der Advisory)
+#   ignoreAdvisories:
+#     - id: GHSA-xxxx-xxxx-xxxx
+#       reason: Die betroffene Funktion nutzt das Projekt nicht
 
 # Abweichungen je Umgebung; der Name entspricht environments[].name in azure-pipelines.yml.
 # Rangfolge der App-Settings: Seed-eigene vor environments.<name>.settings vor settings.

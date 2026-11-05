@@ -99,10 +99,10 @@ auth:
       description: Verwaltet die Anwendung
       memberTypes: [User]                  # User, Application oder beide
       capabilities: [settings.manage]
-  assignmentRequired: false
+  assignmentRequired: true                 # Standard: nur mit zugewiesener Rolle
 ```
 
-- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. `assignmentRequired: true` lässt nur Personen und Anwendungen mit einer Rolle überhaupt ein Token holen.
+- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. Mit `assignmentRequired: true` (Standard) holen nur Personen, Gruppen und Anwendungen mit einer Rolle überhaupt ein Token; nach dem ersten Apply kommt also erst jemand herein, wenn ein Admin ihm eine Rolle zugewiesen hat. Mit `false` bekommt jedes Konto des Tenants ein Token, und nur Functions mit `[RequireCapability]` lehnen es ohne Rolle ab.
 - **API:** `api/Api/Api.csproj` verlinkt `project.yaml` in die Build-Ausgabe; `Bfs.Seed.Auth` liest daraus die Zuordnung, lokal wie in Azure. `[RequireCapability("settings.manage")]` an Function oder Klasse verlangt eine Capability (sonst 403), `User.HasCapability(...)` prüft im Code. Eine Capability, die keine Rolle vergibt, lässt die App nicht starten; `AuthTests` findet solche Tippfehler schon im Build. Eine geänderte Zuordnung braucht nur einen Deploy, eine neue Rolle die Infrastruktur-Freigabe.
 - **Frontend:** `SeedUserProvider` lädt `GET /api/me`; `<IfCapability capability="settings.manage">` und `useCapabilities()` aus `@blackforestsentinel/seed-web-auth/react` blenden Elemente ein oder aus. Das Frontend kennt die Zuordnung nicht, und die Prüfung macht immer die API. Das Benutzermenü zeigt den Anzeigenamen der Rolle; wer angemeldet ist, aber keine Capability hat, sieht statt der Inhalte `AccessDenied` mit der Erklärung, wen man fragen muss (`frontend/src/App.tsx`).
 - **Dienste ohne angemeldete Person:** Eine Rolle mit `memberTypes: [Application]` erlaubt App-only-Tokens (Client-Credentials-Flow); die aufrufende Anwendung bekommt die Rolle als Anwendungsberechtigung. Tokens ohne passende Rolle lehnt die API ab.
