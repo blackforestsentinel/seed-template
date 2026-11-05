@@ -31,7 +31,7 @@ locals {
 }
 
 module "storage" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//storage?ref=v0.16.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//storage?ref=v0.17.0"
   count  = local.storage ? 1 : 0
 
   name                           = local.cfg.project
@@ -40,6 +40,7 @@ module "storage" {
   location                       = module.core.location
   function_identity_principal_id = module.core.function_identity_principal_id
   function_identity_client_id    = module.core.function_identity_client_id
+  owner                          = local.owner
 
   tables     = try(local.storage_cfg.tables, [])
   queues     = try(local.storage_cfg.queues, [])

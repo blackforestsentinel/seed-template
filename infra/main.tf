@@ -7,6 +7,11 @@ locals {
     setsubtract(try(keys(local.env), []), ["auth", "features", "maxInstances", "settings", "hosting", "mcp", "customConnector"]),
     [for key in setsubtract(try(keys(local.env.auth), []), ["directory", "extraRedirectUris"]) : "auth.${key}"],
   )
+  # Besitzer aus project.yaml (owner): Tag owner an allen Ressourcen, Notiz an den
+  # App-Registrierungen, zusätzlicher Empfänger aller Alarme. Leer ("") oder fehlend wird null:
+  # dann weder Tag noch Notiz noch Empfänger.
+  owner = try(coalesce(local.cfg.owner), null)
+
   # Wirksame Features: features, einzelne Schalter überschrieben aus environments.<name>.features.
   features = merge(try(local.cfg.features, {}), try(local.env.features, {}))
   sso      = try(local.features.sso, false)
@@ -92,7 +97,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.16.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.17.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -114,14 +119,16 @@ module "core" {
   log_daily_quota_gb = try(local.cfg.monitoring.dailyCapGb, null)
   # Höchstens so viele Instanzen der Function; ohne Angabe der Default des Moduls.
   maximum_instance_count = try(local.env.maxInstances, null)
+  owner                  = local.owner
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.16.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.17.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
   environment = var.environment
+  owner       = local.owner
   # Ohne Frontend nur die API-Registrierung, keine SPA.
   spa_redirect_uris = local.frontend ? concat(
     [module.core.static_web_app_url],
@@ -167,9 +174,10 @@ module "sso" {
   connector = local.connector
 }
 
+# Alarme gehen an monitoring.recipients und owner; ohne beide gibt es weder Alarme noch Budget.
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.16.0"
-  count  = length(local.alert_recipients) > 0 ? 1 : 0
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.17.0"
+  count  = length(local.alert_recipients) > 0 || local.owner != null ? 1 : 0
 
   name                       = local.cfg.project
   environment                = var.environment
@@ -179,18 +187,21 @@ module "monitoring" {
   application_insights_id    = module.core.application_insights_id
   log_analytics_workspace_id = module.core.log_analytics_workspace_id
   alert_emails               = local.alert_recipients
+  owner                      = local.owner
   exception_threshold        = try(local.cfg.monitoring.exceptionsPerHour, null)
   health_check_url           = "${module.core.function_app_url}/api/health"
   # Abstand in Stunden; ohne Angabe der Default des Moduls (4).
   health_check_interval_hours = try(local.cfg.monitoring.healthCheckHours, null)
   # Betrag je Umgebung oder einer für alle; ohne Betrag kein Budget.
   budget_amount = try(tonumber(local.cfg.monitoring.budget), local.cfg.monitoring.budget[var.environment], null)
+  # Alarm 30 Tage vor dem Ablauf eines Secrets mit Ablaufdatum und beim Ablauf (Event Grid).
+  key_vault_ids = { for m in module.keyvault : "keyvault" => m.key_vault_id }
 }
 
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.16.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.17.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
@@ -200,6 +211,7 @@ module "keyvault" {
   function_identity_principal_id = module.core.function_identity_principal_id
   secrets                        = try(local.cfg.keyVault.secrets, [])
   secret_officers                = try(local.cfg.keyVault.secretOfficers, [])
+  owner                          = local.owner
   # Audit-Log des Vaults (wer hat wann welches Secret gelesen oder gesetzt) im Workspace aus core
   audit_logs = { workspace_id = module.core.log_analytics_workspace_id }
 }
