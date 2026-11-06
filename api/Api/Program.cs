@@ -6,6 +6,7 @@ using Bfs.Seed.OpenApi;
 using Bfs.Seed.Storage;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 // Titel und Beschreibung von openapi.json (Swagger 2.0), das beim Build unter bin/.../openapi/ entsteht;
@@ -17,14 +18,19 @@ var builder = FunctionsApplication.CreateBuilder(args);
 builder.ConfigureFunctionsWebApplication();
 builder.AddSeedCore();
 
+// Zeit über TimeProvider statt DateTime.Now (api/BannedSymbols.txt): per Konstruktor holen, in Tests
+// einen eigenen TimeProvider übergeben.
+builder.Services.AddSingleton(TimeProvider.System);
+
 // Feature keyVault: Secrets aus keyVault.secrets liest SeedSecrets erst beim Gebrauch, z. B.
 // public sealed class PaymentFunction(SeedSecrets secrets) { ... secrets.Get("stripe-key") ... }
 // Fehlt der Wert noch, wirft Get() mit dem Namen des Secrets; die App startet trotzdem.
 
 // Feature sso aus project.yaml: Terraform setzt Seed__Features__Sso und die Auth-Settings.
 // Dann verlangt jede HTTP-Function ein Token; Ausnahmen markiert [AllowAnonymous]. Ohne sso
-// startet die API nicht, solange eine Function mit [RequireCapability] aufrufbar ist; das
-// Beispiel Settings schaltet infra/main.tf dann ab (lokal: local.settings.json).
+// startet die API nicht, solange eine Function mit [RequireCapability], [RequireAnyRole],
+// [AllowWithoutRole] oder [RequireScope] aufrufbar ist; die Beispiele schaltet infra/main.tf dann
+// ab (sso_example_functions, lokal: local.settings.json). SsoTests prüft das im Build.
 if (builder.Configuration.GetValue<bool>("Seed:Features:Sso"))
 {
     builder.UseSeedAuth();

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Api.Jobs;
 using Azure;
 using Bfs.Seed.Storage;
@@ -26,7 +27,7 @@ public class JobFunctionsTests
         var result = Assert.IsType<AcceptedResult>(await Functions.Create(Request("""{"input":"hallo"}"""), cancellationToken));
 
         var response = Assert.IsType<JobResponse>(result.Value);
-        Assert.Equal(JobStatus.Queued, response.Status);
+        Assert.Equal(JobState.Queued, response.Status);
         var (queueName, message) = Assert.Single(queue.Sent);
         Assert.Equal(JobFunctions.QueueName, queueName);
         Assert.Equal(new JobMessage("anonymous", response.Id), message);
@@ -60,6 +61,20 @@ public class JobFunctionsTests
         Assert.IsType<OkObjectResult>(await Functions.Get(Request(null, ObjectId), id, cancellationToken));
         Assert.IsType<NotFoundResult>(await Functions.Get(Request(null), id, cancellationToken));
         Assert.IsType<NotFoundResult>(await Functions.Get(Request(null, ObjectId), "../other", cancellationToken));
+    }
+
+    [Theory]
+    [InlineData(JobStatus.Queued, JobState.Queued)]
+    [InlineData(JobStatus.Running, JobState.Running)]
+    [InlineData(JobStatus.Done, JobState.Done)]
+    [InlineData(JobStatus.Failed, JobState.Failed)]
+    public void Response_KeepsStatusTextOfTable(string stored, JobState state)
+    {
+        var response = JobResponse.From(new JobStatus { RowKey = "1", Status = stored });
+
+        // Im JSON derselbe Text wie in der Tabelle: Clients sehen keinen Unterschied zum String von früher.
+        Assert.Equal(state, response.Status);
+        Assert.Contains($"\"status\":\"{stored}\"", JsonSerializer.Serialize(response, JsonSerializerOptions.Web), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,7 +160,7 @@ public class JobFunctionsTests
             Task.FromResult(Rows.Remove((entity.PartitionKey, entity.RowKey)));
 
         public IAsyncEnumerable<JobStatus> QueryPartitionAsync(string partitionKey, CancellationToken cancellationToken = default) =>
-            Query(Rows.Values.Where(j => j.PartitionKey == partitionKey));
+            Query(Rows.Values.Where(j => j.PartitionKey == partitionKey), cancellationToken);
 
         public IAsyncEnumerable<JobStatus> QueryAsync(string? filter, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

@@ -16,20 +16,20 @@ public class HealthFunctionTests
             .Build()));
 
     [Fact]
-    public void Run_ReturnsReportForConfiguredProject()
+    public async Task Run_ReturnsReportForConfiguredProject()
     {
-        var result = Assert.IsType<OkObjectResult>(Create().Run(new DefaultHttpContext().Request));
+        var result = Assert.IsType<OkObjectResult>(await Create().Run(new DefaultHttpContext().Request, TestContext.Current.CancellationToken));
 
         var report = Assert.IsType<SeedHealthReport>(result.Value);
         Assert.Equal(("ok", "kundenportal", "dev"), (report.Status, report.Project, report.Environment));
     }
 
     [Fact]
-    public void Run_ReportsPlaceholderSecretsWithStatus200()
+    public async Task Run_ReportsPlaceholderSecretsWithStatus200()
     {
         var function = Create(("Secrets:StripeKey", "seed-placeholder:stripe-key"));
 
-        var result = Assert.IsType<OkObjectResult>(function.Run(new DefaultHttpContext().Request));
+        var result = Assert.IsType<OkObjectResult>(await function.Run(new DefaultHttpContext().Request, TestContext.Current.CancellationToken));
 
         var report = Assert.IsType<SeedHealthReport>(result.Value);
         Assert.Equal("degraded", report.Status);

@@ -1,0 +1,49 @@
+// Verbotene APIs für alle Projekte unter api/ (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030
+// als Fehler). Format: Dokumentations-ID;Meldung. Die Meldung nennt Grund und Alternative.
+// Eine Ausnahme geht nur am Aufruf, mit Begründung:
+//   [SuppressMessage("ApiDesign", "RS0030", Justification = "…")]
+
+// Zeit: In Azure läuft die Function in UTC, lokal in der Zeitzone des Rechners. Zeit kommt aus
+// TimeProvider (per Dependency Injection, in Tests FakeTimeProvider), Zeitzonen aus einer Einstellung.
+P:System.DateTime.Now;Ortszeit des Servers, in Azure UTC, lokal nicht: TimeProvider.GetUtcNow() nutzen, für Ortszeit TimeZoneInfo aus einer Einstellung.
+P:System.DateTime.Today;Datum in der Zeitzone des Servers: TimeProvider.GetUtcNow() nutzen und mit TimeZoneInfo aus einer Einstellung umrechnen.
+P:System.DateTimeOffset.Now;Ortszeit des Servers: TimeProvider.GetUtcNow() nutzen, für Ortszeit TimeProvider.GetLocalNow() mit gesetzter Zeitzone oder TimeZoneInfo.ConvertTime().
+P:System.TimeZoneInfo.Local;Zeitzone des Servers, in Azure UTC: TimeZoneInfo.FindSystemTimeZoneById() mit der Zeitzone aus einer Einstellung nutzen.
+M:System.DateTime.ToLocalTime;Rechnet in die Zeitzone des Servers um: TimeZoneInfo.ConvertTime() mit der Zeitzone aus einer Einstellung nutzen.
+M:System.DateTimeOffset.ToLocalTime;Rechnet in die Zeitzone des Servers um: TimeZoneInfo.ConvertTime() mit der Zeitzone aus einer Einstellung nutzen.
+
+// HTTP: Ein eigener HttpClient je Aufruf erschöpft Sockets und übersieht DNS-Änderungen.
+M:System.Net.Http.HttpClient.#ctor;Erschöpft Sockets: IHttpClientFactory nutzen (builder.Services.AddHttpClient<T>(), dann HttpClient per Konstruktor).
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler);Eigener Handler je Client erschöpft Sockets: IHttpClientFactory mit AddHttpMessageHandler/ConfigurePrimaryHttpMessageHandler nutzen; in Tests mit Fake-Handler SuppressMessage mit Begründung.
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler,System.Boolean);Eigener Handler je Client erschöpft Sockets: IHttpClientFactory mit AddHttpMessageHandler/ConfigurePrimaryHttpMessageHandler nutzen; in Tests mit Fake-Handler SuppressMessage mit Begründung.
+
+// Warten und Blockieren: Ein blockierter Thread fehlt dem Host für andere Aufrufe.
+M:System.Threading.Thread.Sleep(System.Int32);Blockiert den Thread: await Task.Delay(…, cancellationToken) nutzen, in Tests TimeProvider.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Blockiert den Thread: await Task.Delay(…, cancellationToken) nutzen, in Tests TimeProvider.
+M:System.Threading.Tasks.Task.Wait;Blockiert den Thread und kann sich verklemmen: await nutzen.
+M:System.Threading.Tasks.Task.Wait(System.Int32);Blockiert den Thread und kann sich verklemmen: await nutzen, mit Timeout per CancellationToken oder WaitAsync().
+M:System.Threading.Tasks.Task.Wait(System.TimeSpan);Blockiert den Thread und kann sich verklemmen: await nutzen, mit Timeout per WaitAsync().
+M:System.Threading.Tasks.Task.Wait(System.Threading.CancellationToken);Blockiert den Thread und kann sich verklemmen: await nutzen.
+M:System.Threading.Tasks.Task.Wait(System.Int32,System.Threading.CancellationToken);Blockiert den Thread und kann sich verklemmen: await nutzen, mit Timeout per WaitAsync().
+M:System.Threading.Tasks.Task.Wait(System.TimeSpan,System.Threading.CancellationToken);Blockiert den Thread und kann sich verklemmen: await nutzen, mit Timeout per WaitAsync().
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[]);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Int32);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.TimeSpan);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Threading.CancellationToken);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Int32,System.Threading.CancellationToken);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.ReadOnlySpan{System.Threading.Tasks.Task});Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAll(System.Collections.Generic.IEnumerable{System.Threading.Tasks.Task},System.Threading.CancellationToken);Blockiert den Thread: await Task.WhenAll(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[]);Blockiert den Thread: await Task.WhenAny(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Int32);Blockiert den Thread: await Task.WhenAny(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.TimeSpan);Blockiert den Thread: await Task.WhenAny(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Threading.CancellationToken);Blockiert den Thread: await Task.WhenAny(…) nutzen.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Int32,System.Threading.CancellationToken);Blockiert den Thread: await Task.WhenAny(…) nutzen.
+P:System.Threading.Tasks.Task`1.Result;Blockiert den Thread und kann sich verklemmen: await nutzen.
+P:System.Threading.Tasks.ValueTask`1.Result;Blockiert den Thread, bei einer noch laufenden Operation undefiniert: await nutzen.
+// GetAwaiter().GetResult() blockiert genauso, steht aber nicht hier: Der Einstiegspunkt, den xunit
+// beim Build erzeugt, nutzt es, und RS0030 prüft auch erzeugten Code.
+
+// Konfiguration und Ausgabe
+M:System.Environment.GetEnvironmentVariable(System.String);Umgeht Konfiguration und Tests: IConfiguration oder IOptions<T> nutzen; App-Settings aus project.yaml kommen dort an.
+M:System.Environment.GetEnvironmentVariable(System.String,System.EnvironmentVariableTarget);Umgeht Konfiguration und Tests: IConfiguration oder IOptions<T> nutzen; App-Settings aus project.yaml kommen dort an.
+T:System.Console;Landet nicht strukturiert in Application Insights: ILogger<T> per Konstruktor nutzen.

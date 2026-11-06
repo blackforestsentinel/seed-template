@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 using Azure;
 using Azure.Data.Tables;
 
@@ -6,7 +7,8 @@ namespace Api.Jobs;
 
 /// <summary>
 /// Status eines Jobs in der Tabelle <c>jobs</c>: PartitionKey ist die Eigentümerin (oid),
-/// RowKey die Job-ID. Der ETag schützt vor gleichzeitigen Änderungen.
+/// RowKey die Job-ID. Der ETag schützt vor gleichzeitigen Änderungen. In der Tabelle steht der
+/// Status als Text (queued, running, done, failed); die API gibt ihn als <see cref="JobState"/> aus.
 /// </summary>
 public sealed class JobStatus : ITableEntity
 {
@@ -45,12 +47,34 @@ public sealed record JobRequest([property: Description("Text, 1 bis 1000 Zeichen
 /// <summary>Fehler-Body bei 400; ein Record statt eines anonymen Objekts, damit openapi.json ein Schema hat.</summary>
 public sealed record JobError(string Error);
 
+/// <summary>
+/// Status eines Jobs in Antworten der API. Feste Wertelisten sind ein Enum mit
+/// JsonStringEnumConverter: Dann steht die Liste im OpenAPI-Dokument, und der Custom Connector
+/// zeigt eine Auswahl. Die Namen im JSON sind dieselben Texte wie in der Tabelle.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<JobState>))]
+public enum JobState
+{
+    [JsonStringEnumMemberName(JobStatus.Queued)]
+    Queued,
+
+    [JsonStringEnumMemberName(JobStatus.Running)]
+    Running,
+
+    [JsonStringEnumMemberName(JobStatus.Done)]
+    Done,
+
+    [JsonStringEnumMemberName(JobStatus.Failed)]
+    Failed,
+}
+
 /// <summary>Antwort mit dem Status eines Jobs.</summary>
 public sealed record JobResponse(
     [property: Description("Job-ID")] string Id,
-    [property: Description("queued, running, done oder failed")] string Status,
+    [property: Description("Status des Jobs")] JobState Status,
     [property: Description("Ergebnis, sobald der Status done ist")] string? Result,
     [property: Description("Zahl der Verarbeitungsversuche")] int Attempts)
 {
-    public static JobResponse From(JobStatus job) => new(job.RowKey, job.Status, job.Result, job.Attempts);
+    public static JobResponse From(JobStatus job) =>
+        new(job.RowKey, Enum.Parse<JobState>(job.Status, ignoreCase: true), job.Result, job.Attempts);
 }

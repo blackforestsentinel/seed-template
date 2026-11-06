@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Bfs.Seed.Auth;
 using Bfs.Seed.Functions.Core;
 using Bfs.Seed.OpenApi;
@@ -5,7 +6,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Options;
-using System.ComponentModel;
 
 namespace Api.Settings;
 

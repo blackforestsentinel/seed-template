@@ -13,14 +13,15 @@ Dünnes Template für Web-Apps aus Azure Static Web App (React) und Azure Functi
 ├── frontend/             React, React Router, React Query (Vite)
 ├── api/                  Azure Function, dotnet-isolated, mit Tests
 ├── infra/                Terraform, zieht Module aus seed-terraform
-└── azure-pipelines.yml   extends auf seed-pipelines
+├── azure-pipelines.yml   extends auf seed-pipelines
+└── AGENTS.md             Regeln für Coding-Agents; CLAUDE.md und .claude/ für Claude Code
 ```
 
 ## Neues Projekt starten
 
 **Einmal pro Kunde (Tenant und Azure-DevOps-Projekt):** Das Onboarding-Skript aus [seed-pipelines](https://github.com/blackforestsentinel/seed-pipelines) richtet Deployment-Identität, Rechte, Terraform-State, Service Connections und die Pipeline `seed-scaffold` ein. Danach einmalig einen PAT als geheime Variable `SeedScaffoldPat` an `seed-scaffold` hinterlegen (siehe dortige README).
 
-**Je Projekt:** Pipeline `seed-scaffold` starten und Name, Features, Frontend (ja oder nur API), Umgebungen und Freigebende angeben. Sie legt das Repo aus diesem Template an, schreibt `project.yaml` und `azure-pipelines.yml`, legt Environments mit Freigaben und die Pipeline an und startet den ersten Lauf. Darin gibt eine Administratorin oder ein Administrator einmal die Azure-Service-Connection frei („Permit“) und danach die Infrastruktur („Approve“).
+**Je Projekt:** Pipeline `seed-scaffold` starten und Name, Features, Frontend (ja oder nur API), Umgebungen und Freigebende angeben. Sie legt das Repo aus diesem Template an, schreibt `project.yaml` und `azure-pipelines.yml`, legt Environments mit Freigaben und die Pipeline an und startet den ersten Lauf. Darin gibt eine Administratorin oder ein Administrator einmal die Azure-Service-Connection frei („Permit“) und danach die Infrastruktur („Approve“). Danach in `project.yaml` unter `owner` die Adresse des verantwortlichen Teams eintragen.
 
 Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infrastruktur ändert, wartet sie auf die Freigabe und wendet den Plan an. Danach deployt sie Function und Frontend und prüft beides per Smoke-Test.
 
@@ -28,7 +29,7 @@ Die Pipeline baut und testet und plant die Infrastruktur. Nur wenn sich die Infr
 
 ## Lokal entwickeln
 
-Voraussetzungen: .NET SDK 10, Node 24, Azure Functions Core Tools 4.
+Voraussetzungen: .NET SDK 10, Node 24 (Frontend und Hooks für Claude Code), Azure Functions Core Tools ab 4.13.0. Ältere Core Tools bringen einen Functions-Host vor .NET 10 mit; `func start` bricht dann mit „Could not load file or assembly 'Microsoft.Extensions.Options, Version=10.0.0.0'“ ab, weil die Queue-Erweiterung (`Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues` 5.5.5) .NET-10-Bibliotheken braucht. In Azure läuft immer ein aktueller Host.
 
 ```bash
 # API auf http://localhost:7071
@@ -42,9 +43,9 @@ npm install
 npm run dev
 ```
 
-Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`.
+Tests: `dotnet test --solution api/Api.slnx` und `npm test` in `frontend/`. Vor dem Commit außerdem `dotnet build api/Api.slnx -warnaserror -warnNotAsError:NU1603,NU1608,NU1801,NU1900,NU1901,NU1902,NU1903,NU1904,NU1905,MSB3026` (wie die Pipeline) und `dotnet format api/Api.slnx`, siehe [Regeln und Prüfungen](#regeln-und-prüfungen).
 
-**Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen und `AzureWebJobs.Settings.Disabled` entfernen. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Unter `auth.directory.people` stehen erfundene Personen und eine Anwendung (`"kind": "servicePrincipal"`) für die Personen-Komponenten; ohne Graph zeigen Avatare Initialen, und die Personenauswahl sucht in dieser Liste. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
+**Lokal mit Anmeldung (Feature sso):** In `local.settings.json` `Seed__Features__Sso` auf `true` setzen und `AzureWebJobs.Settings.Disabled` sowie `AzureWebJobs.Me.Disabled` entfernen. Ohne sso bleiben beide abgeschaltet, weil die API mit Functions, die eine Anmeldung verlangen, sonst nicht startet; das Frontend mit `"mode": "local"` in `public/config.json` braucht `GET /api/me` und damit sso. `Auth__Mode` ist dort `Local`: Die API verlangt dann kein Token, jede Anfrage läuft als Entwicklungsnutzer mit den Rollen aus `Auth__LocalUser__Roles__0`, `__1` … (Default `Admin`) und den Capabilities, die `auth.roles` in `project.yaml` dafür vorsieht. `public/config.json` enthält passend `"auth": { "mode": "local" }`; das Frontend startet ohne MSAL und lädt die Person von `GET /api/me`. Unter `auth.directory.people` stehen erfundene Personen und eine Anwendung (`"kind": "servicePrincipal"`) für die Personen-Komponenten; ohne Graph zeigen Avatare Initialen, und die Personenauswahl sucht in dieser Liste. Um andere Rechte auszuprobieren, die Rollen in `local.settings.json` ändern und `func start` neu starten. In Azure startet die API mit `Auth__Mode=Local` nicht.
 
 Wer lokal gegen Entra ID testen will, entfernt `Auth__Mode`, trägt die Werte aus dem Terraform-Output der Umgebung `dev` ein (`Auth__TenantId`, `Auth__ClientId`, `Auth__Audience` in `local.settings.json`, `frontend_config` in `public/config.json`); `http://localhost:5173/` ist in `dev` als Redirect-URI eingetragen.
 
@@ -54,9 +55,52 @@ Mit dem Feature `storage` braucht die API lokal [Azurite](https://learn.microsof
 
 - **API:** `builder.AddSeedCore()` aus `Bfs.Seed.Functions.Core` richtet Application Insights, die Seed-Optionen und `SeedSecrets` ein; der Health-Endpunkt liefert `SeedHealthReport`. `Bfs.Seed.Auth` und `Bfs.Seed.Mcp` schalten sich über die Features `sso` und `mcp` zu, `Bfs.Seed.OpenApi` exportiert beim Build das OpenAPI-Dokument für den Custom Connector, mit dem Feature `storage` kommen `builder.AddSeedStorage()` aus `Bfs.Seed.Storage` und das Beispiel in `api/Api/Jobs` dazu. Telemetrie geht per Managed Identity an Application Insights, ohne Schlüssel im Code.
 - **Frontend:** `loadRuntimeConfig()` und `createHttpClient()` aus `@blackforestsentinel/seed-web-core` lesen `/config.json` und sprechen mit der API. `@blackforestsentinel/seed-web-people` liefert Anmeldeseite, Benutzermenü in der Kopfzeile, die Seite „Kein Zugriff“ und Personen-Komponenten; `frontend/src/pages/PeoplePage.tsx` zeigt Personenauswahl und `PersonLabel`. Farben und Schrift kommen als CSS-Variablen (`--seed-…`) aus deren Stylesheet, hell und dunkel.
-- **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
+- **Rechte:** `api/Api/Me/MeFunction.cs` (`GET /api/me`, `[AllowWithoutRole]`) liefert die Person mit Rollen und Capabilities, `api/Api/Settings/SettingsFunction.cs` zeigt `[RequireCapability]`, `frontend/src/pages/HomePage.tsx` `<IfCapability>` (siehe sso).
 
 Verbesserungen an diesen Bausteinen kommen per Versions-Bump der Pakete ins Projekt.
+
+## Endpunkte
+
+Die Tabelle zwischen den Markern schreibt der Build der API aus dem OpenAPI-Dokument (`Bfs.Seed.OpenApi`, `SeedOpenApiReadme` in `api/Api/Api.csproj`). Nicht von Hand ändern: Nach Änderungen an Functions lokal bauen und die README mitcommitten. Die Pipeline schreibt nichts; mit `treatWarningsAsErrors: true` (Standard) bricht sie bei einer veralteten Tabelle ab (`SEEDOPENAPI015`).
+
+<!-- seed:endpoints:start -->
+
+| Methode | Pfad | operationId | Zusammenfassung | Capability | Deprecated |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/api/health` | `GetHealth` | Status der API abrufen | anonym |  |
+| POST | `/api/jobs` | `CreateJob` | Job anlegen | `jobs.run` |  |
+| GET | `/api/jobs/{id}` | `GetJob` | Job abrufen | `jobs.run` |  |
+| GET | `/api/me` | `GetMe` | Angemeldete Person abrufen | ohne Rolle |  |
+| GET | `/api/settings` | `GetSettings` | Einstellungen abrufen | `settings.manage` |  |
+
+<!-- seed:endpoints:end -->
+
+## Regeln und Prüfungen
+
+Viele Projekte entstehen mit Coding-Agents. Deshalb setzt der Build die Regeln durch, statt sie nur zu beschreiben. Ausnahmen gibt es, aber nur mit einer Begründung, die im Pull Request steht.
+
+- **Warnungen als Fehler:** Warnungen von Compiler, Nullable, Analyzern, Code-Stil und MSBuild (etwa `SEEDOPENAPI*`) brechen in der Pipeline den Build (Parameter `treatWarningsAsErrors` von seed-pipelines, Standard an); nur Warnungen von NuGet, die vom Netz abhängen oder Lücken melden, bleiben Warnungen, die prüft die Pipeline gesondert. Lokal prüft `dotnet build api/Api.slnx -warnaserror -warnNotAsError:NU1603,NU1608,NU1801,NU1900,NU1901,NU1902,NU1903,NU1904,NU1905,MSB3026` dasselbe; fest eingestellt ist es lokal nicht, damit eine Warnung nicht schon `func start` aufhält. Die Regeln stehen in `api/Directory.Build.props` (Nullable, `AnalysisLevel` 10.0-recommended, `EnforceCodeStyleInBuild`) und in `.editorconfig` (Stil und Namen wie im bestehenden Code); dort abgeschwächte Regeln stehen mit Grund.
+- **Format:** `dotnet format api/Api.slnx` vor dem Commit. Pipeline und Stop-Hook prüfen nur den Leerraum (`dotnet format whitespace --verify-no-changes`); den Rest der `.editorconfig` meldet der Build, soweit die Regeln dort auf warning stehen.
+- **Verbotene APIs:** `api/BannedSymbols.txt` sperrt etwa `DateTime.Now`, `TimeZoneInfo.Local`, `new HttpClient()`, `Thread.Sleep`, `.Result`, `Environment.GetEnvironmentVariable` und `Console`. Der Fehler RS0030 nennt die Alternative, etwa `TimeProvider` oder `IHttpClientFactory`. Eine Ausnahme geht nur am Aufruf: `[SuppressMessage("ApiDesign", "RS0030", Justification = "…")]`.
+- **Rechte je Function:** Jede HTTP-Function und jedes MCP-Werkzeug legt fest, wer es aufrufen darf, sonst bricht der Build ab (`SEEDAUTH001`, `SEEDAUTH002`, Analyzer aus `Bfs.Seed.Auth`). Die Regel ist `[RequireCapability]`. `[RequireAnyRole]` gibt eine Function jeder App-Rolle frei, `[AllowWithoutRole]` jedem angemeldeten Konto (wie `GET /api/me`), `[AllowAnonymous]` ohne Token; alle drei nur mit Grund. Ohne Token erreichbar ist nur `/api/health`. `[AllowAnonymous]` steht nur an der Methode oder der eigenen Klasse und nie zusammen mit einem der anderen Attribute, auch nicht über Klasse oder Basisklasse (`SEEDAUTH003`). Die Beispiel-Jobs verlangen die Capability `jobs.run`.
+- **Fachliche Endpunkte brauchen sso:** Ohne sso startet die API nicht, solange eine Function mit `[RequireCapability]`, `[RequireAnyRole]`, `[AllowWithoutRole]` oder `[RequireScope]` aufrufbar ist. Vor der ersten eigenen Function deshalb `features.sso: true` setzen; ohne sso geht nur `[AllowAnonymous]`, und das bleibt anonym, auch wenn sso später kommt. `api/Api.Tests/SsoTests.cs` prüft im Build, dass jede solche Function ohne sso abgeschaltet ist, in Azure über `sso_example_functions` (`infra/main.tf`) bzw. `storage_example_functions` (`infra/storage.tf`), lokal über `local.settings.sample.json`.
+- **Wertelisten:** Feste Werte als `enum` mit `[JsonConverter(typeof(JsonStringEnumConverter<T>))]`, wie `JobState` im Beispiel `api/Api/Jobs`. Dann steht die Liste im OpenAPI-Dokument, und der Custom Connector zeigt eine Auswahl; ein `string` mit Konstanten zeigt nur ein freies Feld.
+- **Ausnahmen mit Begründung:** Jede Begründung hat mindestens zehn Zeichen: `Justification`, Kommentar am `#pragma`, `reason` in `project.yaml` und Trivy-Ausnahmen. `[SuppressMessage(…, Justification = "…")]` ohne Begründung ist ein Fehler (`SEEDSUPPRESS001`), ebenso `#pragma warning disable` ohne `//`-Kommentar in derselben Zeile (`SEEDSUPPRESS002`). `SEEDAUTH001`–`003` und `SEEDSUPPRESS*` lassen sich weder per `.editorconfig` noch `NoWarn` noch `#pragma` abschalten, nur mit `[SuppressMessage("Security", "SEEDAUTH001", Justification = "…")]`. Wer RS0030 oder eine `SEED…`-Regel in `.editorconfig`, `*.props` oder `*.csproj` abschwächt, braucht einen Kommentar mit Begründung in der Zeile davor, sonst bricht die Pipeline ab; pauschale Abschaltungen wie `RunAnalyzers false` meldet sie als Warnung.
+- **Pakete:** Vorabversionen direkt referenzierter NuGet-Pakete und bekannte Sicherheitslücken der Stufen High und Critical, auch in transitiven Paketen, brechen den Build, außer sie stehen mit Begründung unter `build` in `project.yaml` (`id`: GHSA-ID oder URL der Advisory). Lücken der Stufen Low und Moderate und veraltete Pakete sind Warnungen:
+
+  ```yaml
+  build:
+    prereleasePackages:
+      - name: Some.Package          # NuGet-Paket-ID
+        reason: Behebt einen Fehler, den das Projekt braucht
+    ignoreAdvisories:
+      - id: GHSA-xxxx-xxxx-xxxx
+        reason: Die betroffene Funktion nutzt das Projekt nicht
+  ```
+- **Besitzer:** `owner` in `project.yaml`, die Adresse eines Teams oder Verteilers, steht als Tag `owner` an allen Azure-Ressourcen und als Notiz an den App-Registrierungen und bekommt alle Alarme, auch den vor dem Ablauf eines Secrets. Leer (`""`) gibt es weder Tag noch Notiz noch Empfänger.
+- **Offene Angaben:** Je `TODO(onboarding)` in `project.yaml` warnt die Pipeline, bis die Angabe nachgetragen ist.
+- **Terraform-Sicherheitsscan:** Trivy prüft die eigenen `.tf`-Dateien in `infra/` (README von seed-pipelines, „Terraform-Sicherheitsscan“). Eine Ausnahme steht inline über dem Block oder der Zeile, mit Begründung von mindestens zehn Zeichen: `# trivy:ignore:AZU-0011 <Begründung>`, mit Ablaufdatum `# trivy:ignore:AZU-0011:exp:2027-12-31 <Begründung>`. `.trivyignore` wirkt nicht.
+- **Coding-Agents:** `AGENTS.md` fasst die Regeln für Coding-Agents zusammen; `CLAUDE.md` bindet sie für Claude Code ein. `.claude/settings.json` startet zwei Hooks (Node-Skripte in `.claude/hooks/`): Nach Änderungen unter `api/` oder `frontend/` laufen Build, Tests und Leerraum-Prüfung wie in der Pipeline, bevor Claude eine Antwort beendet; Fehler und vom Build geschriebene Dateien wie die README gehen an Claude zurück. Maßgeblich ist der Inhalt der Dateien, nicht Commits: Ein grüner Stand und der Stand zu Beginn der Sitzung laufen nicht noch einmal, und derselbe Fehler blockt je Sitzung nur einmal. Zustand und Build-Ausgabe liegen je Benutzer unter `%LOCALAPPDATA%\seed-hooks` bzw. `~/.cache/seed-hooks`. Beim Start einer Sitzung vergleicht ein Hook die Seed-Versionen mit dem neuesten Release und schlägt das Update vor; ohne Netz bleibt er still, mit der Umgebungsvariable `SEED_UPDATE_CHECK=0` ganz. Persönliche Einstellungen gehören in `.claude/settings.local.json`, die nicht eingecheckt wird.
 
 ## Terraform
 
@@ -78,11 +122,11 @@ Dasselbe gilt, wenn eine neue Version der Module einen weiteren Provider verlang
 
 ### sso: Login mit Entra ID
 
-In `project.yaml` `sso: true` setzen und pushen. Mehr braucht es nicht:
+In `project.yaml` `sso: true` setzen und pushen. Das gehört vor die erste eigene Function, denn ohne sso startet die API mit Functions, die eine Anmeldung verlangen, nicht (siehe [Regeln und Prüfungen](#regeln-und-prüfungen)). Mehr braucht es nicht:
 
 - **Infrastruktur:** Terraform legt die App-Registrierungen für API und Frontend an und setzt die App-Settings der Function (`Seed__Features__Sso`, `Auth__*`).
 - **API:** `Program.cs` schaltet `builder.UseSeedAuth()` über `Seed__Features__Sso` ein. Dann verlangt jede HTTP-Function ein gültiges Token; Ausnahmen markiert `[AllowAnonymous]` wie beim Health-Endpunkt. Die angemeldete Person steht in `request.HttpContext.User`. Fehlen bei eingeschaltetem sso die Auth-Settings, startet die App nicht.
-- **Ohne sso:** `[RequireCapability]` und `[RequireScope]` prüft nur die Token-Prüfung. Ist eine Function mit einem der Attribute ohne sso aufrufbar, startet die API deshalb nicht; die Meldung nennt die Function. Das Beispiel `Settings` schaltet `infra/main.tf` ohne sso per `AzureWebJobs.Settings.Disabled` ab (Liste `sso_example_functions`), lokal `local.settings.json`.
+- **Ohne sso:** `[RequireCapability]`, `[RequireAnyRole]`, `[AllowWithoutRole]` und `[RequireScope]` prüft nur die Token-Prüfung. Ist eine Function mit einem der Attribute ohne sso aufrufbar, startet die API deshalb nicht; die Meldung nennt die Function. Die Beispiele `Settings`, `Me`, `CreateJob` und `GetJob` schaltet `infra/main.tf` ohne sso per `AzureWebJobs.<Name>.Disabled` ab (Liste `sso_example_functions`), lokal `local.settings.json`.
 - **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von Anwendungen an, die das Projekt kennt: Frontend (auch eine Browser-Erweiterung mit derselben Registrierung), Custom Connector und MCP-Clients. Eine fremde App, der jemand zugestimmt hat, bekommt 401. Weitere Anwendungen stehen mit ihrer Client-ID unter `auth.additionalClientIds` in `project.yaml`. Tokens von Diensten mit App-Rolle betrifft das nicht.
 - **Frontend:** Steht ein Auth-Teil in `config.json`, meldet es per MSAL an und hängt an jeden API-Aufruf ein Token. Wer nicht angemeldet ist, sieht die Anmeldeseite (`SignInPage`); wer schon einmal angemeldet war, kommt meist still über die Sitzung bei Entra ID herein. Läuft das Refresh-Token ab (nach 24 Stunden), erneuert es die Sitzung still: erst im unsichtbaren iframe über die Bridge-Seite `frontend/redirect.html`, sonst per Umleitung ohne Dialog. Die Redirect-URI der Bridge-Seite trägt Terraform ein.
 
@@ -98,12 +142,12 @@ auth:
     Admin:
       description: Verwaltet die Anwendung
       memberTypes: [User]                  # User, Application oder beide
-      capabilities: [settings.manage]
-  assignmentRequired: false
+      capabilities: [settings.manage, jobs.run]
+  assignmentRequired: true                 # Standard: nur mit zugewiesener Rolle
 ```
 
-- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. `assignmentRequired: true` lässt nur Personen und Anwendungen mit einer Rolle überhaupt ein Token holen.
-- **API:** `api/Api/Api.csproj` verlinkt `project.yaml` in die Build-Ausgabe; `Bfs.Seed.Auth` liest daraus die Zuordnung, lokal wie in Azure. `[RequireCapability("settings.manage")]` an Function oder Klasse verlangt eine Capability (sonst 403), `User.HasCapability(...)` prüft im Code. Eine Capability, die keine Rolle vergibt, lässt die App nicht starten; `AuthTests` findet solche Tippfehler schon im Build. Eine geänderte Zuordnung braucht nur einen Deploy, eine neue Rolle die Infrastruktur-Freigabe.
+- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. Mit `assignmentRequired: true` (Standard) holen nur Personen, Gruppen und Anwendungen mit einer Rolle überhaupt ein Token; nach dem ersten Apply kommt also erst jemand herein, wenn ein Admin ihm eine Rolle zugewiesen hat. Mit `false` bekommt jedes Konto des Tenants ein Token; Functions mit `[RequireCapability]` oder `[RequireAnyRole]` lehnen es ohne Rolle ab, solche mit `[AllowWithoutRole]` nicht. Fehlt der Schlüssel, gilt `false`, damit ältere Projekte beim Update nicht still umschalten.
+- **API:** `api/Api/Api.csproj` verlinkt `project.yaml` in die Build-Ausgabe; `Bfs.Seed.Auth` liest daraus die Zuordnung, lokal wie in Azure. `[RequireCapability("settings.manage")]` an Function oder Klasse verlangt eine Capability (sonst 403), `[RequireAnyRole]` irgendeine Rolle, `[AllowWithoutRole]` nur ein gültiges Token; `User.HasCapability(...)` prüft im Code. Welche Function was verlangt, zeigt die Spalte Capability unter [Endpunkte](#endpunkte). Eine Capability, die keine Rolle vergibt, lässt die App nicht starten; `AuthTests` findet solche Tippfehler schon im Build. Eine geänderte Zuordnung braucht nur einen Deploy, eine neue Rolle die Infrastruktur-Freigabe.
 - **Frontend:** `SeedUserProvider` lädt `GET /api/me`; `<IfCapability capability="settings.manage">` und `useCapabilities()` aus `@blackforestsentinel/seed-web-auth/react` blenden Elemente ein oder aus. Das Frontend kennt die Zuordnung nicht, und die Prüfung macht immer die API. Das Benutzermenü zeigt den Anzeigenamen der Rolle; wer angemeldet ist, aber keine Capability hat, sieht statt der Inhalte `AccessDenied` mit der Erklärung, wen man fragen muss (`frontend/src/App.tsx`).
 - **Dienste ohne angemeldete Person:** Eine Rolle mit `memberTypes: [Application]` erlaubt App-only-Tokens (Client-Credentials-Flow); die aufrufende Anwendung bekommt die Rolle als Anwendungsberechtigung. Tokens ohne passende Rolle lehnt die API ab.
 
@@ -254,6 +298,8 @@ Für API-Keys und Passwörter, die keine Managed Identity ersetzen kann (Stripe,
 2. Die Pipeline plant neue Ressourcen und wartet auf die Infrastruktur-Freigabe. Terraform legt den Vault an (nur RBAC, Purge-Schutz, 90 Tage Soft Delete), je Secret einen Platzhalter und die App-Settings `Secrets__StripeKey` und `Secrets__SmtpPassword` als Key-Vault-Referenz. Die Function bekommt `Key Vault Secrets User`, die Personen oder Gruppen aus `secretOfficers` `Key Vault Secrets Officer`. Jeder Zugriff auf ein Secret und jede Änderung am Vault landet als Audit-Log im Log Analytics Workspace der Umgebung (`AzureDiagnostics`, Kategorie `AuditEvent`, Spalten `OperationName`, `identity_claim_upn_s`, `id_s`).
 3. Werte setzen (siehe unten). Bis dahin startet die API trotzdem; der Health-Endpunkt meldet `status: "degraded"` mit den Namen der fehlenden Secrets, und `Get()` wirft beim Gebrauch eine Meldung mit dem Namen.
 
+**Ablauf von Secrets:** Ein Ablaufdatum ist freiwillig (`az keyvault secret set … --expires 2027-06-30T00:00:00Z`). Trägt ein Secret eines, meldet der Health-Endpunkt es 30 Tage vorher als `expiring` und danach als `expired`, jeweils mit `status: "degraded"`. Mit Alarmen (`monitoring.recipients` oder `owner`) mailt Azure außerdem 30 Tage vorher und beim Ablauf (Event Grid, Modul monitoring).
+
 Namen: Kleinbuchstaben und Ziffern, Wörter durch Bindestriche getrennt. Im App-Setting beginnt jedes Wort groß und die Bindestriche entfallen: `stripe-key` wird `Secrets__StripeKey`, im Code `Secrets:StripeKey`.
 
 **Secret lesen:** `SeedSecrets` aus `Bfs.Seed.Functions.Core` ist über `AddSeedCore()` registriert. Erst beim Gebrauch lesen, nicht in `Program.cs`, damit die App auch ohne gesetzte Werte startet:
@@ -315,7 +361,7 @@ storage:
 
 - **Infrastruktur:** Terraform (`infra/storage.tf`, Modul `storage` aus seed-terraform) legt einen eigenen Storage Account an, getrennt vom Host-Storage der Function: ohne Shared Key, TLS 1.2, ohne öffentlichen Blob-Zugriff. Die Managed Identity der Function bekommt Blob, Queue und Table Data Contributor. Versionierung und Soft Delete sind an; `retention:` und `lifecycle:` in `project.yaml` steuern Aufbewahrung und Löschfristen (kommentiertes Beispiel dort). Die App-Settings `Seed__Features__Storage` und `SeedStorage__*` beschreiben die Verbindung `SeedStorage` per Managed Identity.
 - **API:** `Program.cs` schaltet `builder.AddSeedStorage()` über `Seed__Features__Storage` ein. Dann gibt es Clients für Table, Blob und Queue, `ISeedTableRepository<T>` mit ETag und `ISeedQueueSender`; Queue-Trigger nutzen `Connection = "SeedStorage"`. Details in der README von [`Bfs.Seed.Storage`](https://github.com/blackforestsentinel/seed-packages/tree/main/dotnet/src/Bfs.Seed.Storage).
-- **Beispiel `api/Api/Jobs`:** `POST /api/jobs` legt einen Job-Status in der Tabelle `jobs` an und stellt eine Nachricht in die Queue `jobs`; die Queue-Function `ProcessJob` verarbeitet ihn und schreibt Status und Ergebnis zurück; `GET /api/jobs/{id}` liest den Status. Mit `sso` gehört jeder Job der angemeldeten Person (PartitionKey = `oid`), andere finden ihn nicht. Ohne `storage` schaltet `infra/storage.tf` die drei Functions per `AzureWebJobs.<Name>.Disabled` ab und setzt einen Platzhalter für die Verbindung, weil der Host einen Queue-Trigger auch abgeschaltet indiziert und ohne Verbindung bei jedem Start einen Fehler meldet. Wer das Beispiel löscht oder umbenennt, passt die Liste `storage_example_functions` dort an.
+- **Beispiel `api/Api/Jobs`:** `POST /api/jobs` legt einen Job-Status in der Tabelle `jobs` an und stellt eine Nachricht in die Queue `jobs`; die Queue-Function `ProcessJob` verarbeitet ihn und schreibt Status und Ergebnis zurück; `GET /api/jobs/{id}` liest den Status. `CreateJob` und `GetJob` verlangen die Capability `jobs.run` (in `project.yaml` bei der Rolle Admin) und damit `sso`; ohne sso schaltet `infra/main.tf` sie ab. Jeder Job gehört der angemeldeten Person (PartitionKey = `oid`), andere finden ihn nicht. Ohne `storage` schaltet `infra/storage.tf` die drei Functions per `AzureWebJobs.<Name>.Disabled` ab und setzt einen Platzhalter für die Verbindung, weil der Host einen Queue-Trigger auch abgeschaltet indiziert und ohne Verbindung bei jedem Start einen Fehler meldet. Wer das Beispiel löscht oder umbenennt, passt die Liste `storage_example_functions` dort an.
 
 **Fehler und Poison-Queue:** Wirft eine Queue-Function, stellt die Queue die Nachricht nach 30 Sekunden erneut zu (`host.json`: `visibilityTimeout`), höchstens fünfmal (`maxDequeueCount`). Danach verschiebt der Host sie in `<queue>-poison` (hier `jobs-poison`), die er selbst anlegt. Dort verarbeitet sie niemand; nach 7 Tagen verfällt sie. Nachrichten kommen mindestens einmal an, die Verarbeitung muss also wiederholbar sein; das Beispiel prüft dafür den Status in der Tabelle.
 
@@ -333,7 +379,7 @@ npm install -g azurite
 azurite --inMemoryPersistence --skipApiVersionCheck   # eigenes Terminal
 ```
 
-In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` entfernen. `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
+In `api/Api/local.settings.json` dann `Seed__Features__Storage` auf `true` setzen und die drei Zeilen `AzureWebJobs.<Name>.Disabled` der Jobs entfernen; `CreateJob` und `GetJob` brauchen dazu lokal auch sso (siehe „Lokal mit Anmeldung“ unter [Lokal entwickeln](#lokal-entwickeln)). `--skipApiVersionCheck` braucht es, wenn die Azure-SDKs neuer sind als Azurite. Zum Ansehen der Daten eignet sich der Azure Storage Explorer (Emulator-Verbindung).
 
 ### customConnector: Power Automate, Power Apps und Copilot Studio
 
@@ -372,6 +418,10 @@ Das Dokument entsteht bei jedem Build unter `api/Api/bin/<Konfiguration>/net10.0
 - `displayName`: Name in der Power Platform, höchstens 30 Zeichen aus Buchstaben ohne Umlaute, Ziffern, Leerzeichen, `-` und `_` (Standard: `<project> <umgebung>`); anderes lehnt die Power Platform ab, der Plan prüft es vorher.
 - `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API.
 - `iconBrandColor`: Farbe des Symbols, Standard `#007ee5`.
+
+**Operationen ablösen:** Flows rufen Operationen über ihre operationId auf. Eine Operation deshalb nicht einfach entfernen oder umbenennen, sondern erst als deprecated markieren, mit `[OpenApiOperation(…, Deprecated = true, DeprecationMessage = "Stattdessen …")]` oder `[Obsolete("Stattdessen …")]` an der Methode (README von `Bfs.Seed.OpenApi`, „Operationen ablösen“). Neue Flows können sie dann nicht mehr wählen, bestehende laufen weiter, und die Pipeline warnt je Flow, der sie noch nutzt. Entfernen erst, wenn keiner sie mehr nutzt.
+
+**Breaking Changes:** Vor dem Deploy vergleicht die Pipeline die Operationen mit dem bisherigen Connector und sucht Flows, die eine entfernte oder unverträglich geänderte Operation nutzen; dann endet der Lauf, bevor sich etwas ändert (README von seed-pipelines). Ist das gewollt, etwa weil der betroffene Flow ohnehin abgeschaltet wird: Pipeline von Hand starten und „Breaking Changes am Custom Connector zulassen“ ankreuzen, dann werden die Fehler zu Warnungen. Ob die Konten der Verbindungen eine Rolle aus `auth.roles` haben, prüft die Pipeline nur mit `checkConnectorConnections: true` in `azure-pipelines.yml`; dafür braucht die Pipeline-Identität weitere Rechte.
 
 **Abschalten:** `customConnector: false` entfernt die Client-Registrierung; Verbindungen funktionieren dann nicht mehr. Den Connector selbst löscht die Pipeline nicht, das geht in Power Automate unter **Benutzerdefinierte Connectors**.
 
@@ -418,7 +468,7 @@ Geänderte Settings ändern die Function App: Die Pipeline wartet auf die Infras
 
 Jede Umgebung hat Application Insights mit Log Analytics. Application Insights nimmt nur Telemetrie mit Entra-Token an; die Function sendet per Managed Identity. Das Tageslimit für Logs (`dailyCapGb`, Default 1 GB) schützt vor Kostenausreißern, etwa durch eine Log-Schleife; ist es erreicht, kommt bis 0 Uhr UTC keine Telemetrie mehr an.
 
-Alarme und Budget schaltet ein Empfänger in `project.yaml` ein:
+Alarme und Budget schaltet ein Empfänger in `project.yaml` ein, unter `monitoring.recipients` oder als `owner`:
 
 ```yaml
 monitoring:
@@ -431,15 +481,16 @@ monitoring:
 
 Dann legt Terraform je Umgebung an:
 
-- eine Aktionsgruppe, die an alle Empfänger mailt; Azure schickt jeder neuen Adresse einmal eine Bestätigung,
+- eine Aktionsgruppe, die an alle Empfänger und `owner` mailt; Azure schickt jeder neuen Adresse einmal eine Bestätigung,
 - einen Alarm, sobald es in einer Stunde `exceptionsPerHour` Exceptions gab,
 - eine Logic App, die alle `healthCheckHours` Stunden (Default 4, höchstens 12) `/api/health` aufruft, und einen Alarm, wenn der Aufruf auch nach Wiederholungen scheitert,
 - einen Alarm, wenn das Tageslimit für Logs erreicht ist, weil bis zum Tageswechsel dann auch die übrigen Alarme still bleiben,
+- mit Feature `keyVault` einen Alarm 30 Tage vor dem Ablauf eines Secrets mit Ablaufdatum und einen beim Ablauf (Event Grid; `infra/providers.tf` registriert dafür `Microsoft.EventGrid`),
 - mit Betrag für die Umgebung ein Monatsbudget der Resource Group in der Abrechnungswährung: Warnung bei 80 % der tatsächlichen Kosten und wenn die Prognose den Betrag übersteigt. `budget: 50` gilt für alle Umgebungen.
 
 Die Meldungen enthalten nur Zählwerte, keine Inhalte von Exceptions oder Logs; die Details stehen in Application Insights. Der Health-Endpunkt muss ohne Token mit 200 antworten, deshalb trägt er `[AllowAnonymous]`. Jeder Health-Check startet die Function nach einer Ruhephase und schreibt deren Startmeldungen in die Logs; ein kürzerer Abstand meldet Ausfälle früher, kostet aber Freikontingent und Log-Volumen. Health-Check und Alarme kosten zusammen rund 1 Euro im Monat je Umgebung, Details und Entscheidungen im [Modul monitoring](https://github.com/blackforestsentinel/seed-terraform/tree/main/monitoring).
 
-Ohne `recipients` gibt es keine Alarme und kein Budget; Application Insights und das Tageslimit bleiben.
+Ohne `recipients` und ohne `owner` gibt es keine Alarme und kein Budget; Application Insights und das Tageslimit bleiben.
 
 ## Hosting
 

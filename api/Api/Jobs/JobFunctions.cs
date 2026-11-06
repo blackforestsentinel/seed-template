@@ -1,3 +1,4 @@
+using Bfs.Seed.Auth;
 using Bfs.Seed.OpenApi;
 using Bfs.Seed.Storage;
 using Microsoft.AspNetCore.Http;
@@ -11,14 +12,20 @@ namespace Api.Jobs;
 /// Beispiel für das Feature storage: Ein Endpunkt stellt einen Job in die Queue, eine
 /// Queue-Function verarbeitet ihn und hält den Status in einer Tabelle fest, die der
 /// Endpunkt <c>GET /api/jobs/{id}</c> liest. Ohne Feature storage sind die Functions per
-/// App-Setting abgeschaltet (infra/storage.tf).
+/// App-Setting abgeschaltet (infra/storage.tf). Die Endpunkte verlangen die Capability jobs.run,
+/// die in project.yaml die Rolle Admin vergibt; ohne sso sind sie deshalb abgeschaltet
+/// (infra/main.tf, sso_example_functions).
 /// </summary>
 public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueueSender queue, ILogger<JobFunctions> logger)
 {
     /// <summary>Queue aus project.yaml (storage.queues).</summary>
     public const string QueueName = "jobs";
 
+    /// <summary>Capability für Anlegen und Abrufen von Jobs (auth.roles in project.yaml).</summary>
+    public const string RunCapability = "jobs.run";
+
     [Function("CreateJob")]
+    [RequireCapability(RunCapability)]
     [OpenApiOperation("CreateJob", "Job anlegen", Description = "Stellt einen Job in die Warteschlange; den Fortschritt liefert GetJob.")]
     [OpenApiRequestBody(typeof(JobRequest))]
     [OpenApiResponse(202, typeof(JobResponse), Description = "Job angelegt, Status queued")]
@@ -43,6 +50,7 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
     }
 
     [Function("GetJob")]
+    [RequireCapability(RunCapability)]
     [OpenApiOperation("GetJob", "Job abrufen", Description = "Status und Ergebnis eines eigenen Jobs.")]
     [OpenApiParameter("id", Description = "Job-ID aus CreateJob", Summary = "Job-ID")]
     [OpenApiResponse(200, typeof(JobResponse), Description = "Job")]
@@ -113,8 +121,8 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
     }
 
     /// <summary>
-    /// Mit sso gehört jeder Job der angemeldeten Person (PartitionKey = oid). Ohne sso ist die
-    /// API offen; dann teilen sich alle eine Partition.
+    /// Jeder Job gehört der angemeldeten Person (PartitionKey = oid). Ohne angemeldete Person, etwa
+    /// in Tests, teilen sich alle eine Partition.
     /// </summary>
     private static string Owner(HttpRequest request) =>
         request.HttpContext.User.Identity?.IsAuthenticated == true

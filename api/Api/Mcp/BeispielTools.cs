@@ -17,6 +17,8 @@ namespace Api.Mcp;
 public sealed class BeispielTools(IOptions<SeedOptions> options)
 {
     /// <summary>Frei für alle Angemeldeten: Wer fragt, mit welchen Berechtigungen.</summary>
+    // Auch ohne Rolle: Das Werkzeug erklärt gerade dann, welche Rollen und Berechtigungen fehlen.
+    [AllowWithoutRole]
     [McpServerTool(Name = "ueberblick_abrufen", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Nennt die anfragende Person, ihre App-Rollen und Berechtigungen sowie Projekt und Umgebung. Rufe dieses Werkzeug zuerst auf.")]
     public Ueberblick UeberblickAbrufen(ClaimsPrincipal user) => new(
