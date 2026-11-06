@@ -19,4 +19,10 @@
     <ProjectReference Include="..\Api\Api.csproj" />
   </ItemGroup>
 
+  <!-- SsoTests: welche Functions infra/ und local.settings.sample.json ohne sso abschalten. -->
+  <ItemGroup>
+    <None Include="..\..\infra\*.tf" LinkBase="infra" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Api\local.settings.sample.json" Link="local.settings.sample.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
