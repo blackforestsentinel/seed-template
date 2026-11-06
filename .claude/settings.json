@@ -12,6 +12,16 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/seed-verify.mjs", "--baseline"],
+            "timeout": 30
+          }
+        ]
       }
     ],
     "Stop": [
