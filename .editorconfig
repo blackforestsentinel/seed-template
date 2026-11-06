@@ -68,9 +68,10 @@ dotnet_style_null_propagation = true:suggestion
 csharp_style_throw_expression = true:suggestion
 
 # Schwere der Stilregeln. Der Build meldet IDE0161, IDE0065, IDE0011, IDE0040, IDE0044, IDE0007
-# und IDE1006; IDE0003, IDE0009, IDE0049, Leerraum und die Reihenfolge der usings prüft
-# dotnet format --verify-no-changes. Die Schwere hinter dem Doppelpunkt oben liest nicht jedes
-# Werkzeug, deshalb steht sie hier noch einmal.
+# und IDE1006. Den Leerraum prüfen Pipeline und Stop-Hook (dotnet format whitespace
+# --verify-no-changes). IDE0003, IDE0009, IDE0049 und die Reihenfolge der usings bereinigt
+# dotnet format vor dem Commit; geprüft werden sie nicht. Die Schwere hinter dem Doppelpunkt oben
+# liest nicht jedes Werkzeug, deshalb steht sie hier noch einmal.
 dotnet_diagnostic.IDE0161.severity = warning
 dotnet_diagnostic.IDE0065.severity = warning
 dotnet_diagnostic.IDE0011.severity = warning

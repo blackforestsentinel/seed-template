@@ -22,7 +22,8 @@ public class AuthTests
     [Fact]
     public void Me_IsReachableWithoutRole()
     {
-        // Das Frontend zeigt „Kein Zugriff“ nur, wenn GET /api/me auch ohne Rolle mit 200 antwortet.
+        // Mit auth.assignmentRequired: false zeigt das Frontend „Kein Zugriff“ nur, wenn GET /api/me
+        // auch ohne Rolle mit 200 antwortet; mit true bekommt ohne Rolle niemand ein Token.
         Assert.NotNull(typeof(MeFunction).GetCustomAttribute<AllowWithoutRoleAttribute>());
     }
 

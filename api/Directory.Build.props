@@ -6,9 +6,10 @@
     Warnungen als Fehler setzt die Pipeline (Parameter treatWarningsAsErrors von seed-pipelines,
     Standard true), nicht diese Datei: Ein fester Wert hier würde den Schalter der Pipeline
     übergehen, und lokal soll eine Warnung nicht schon func start oder das Debuggen aufhalten.
-    Vor dem Commit prüft dotnet build -warnaserror dasselbe wie die Pipeline, mit
-    -warnNotAsError für die Lücken in Paketen (NU1901-NU1904, Befehl in AGENTS.md); der Stop-Hook
-    in .claude/settings.json tut das für Claude Code.
+    Vor dem Commit prüft dotnet build mit denselben Schaltern wie die Pipeline dasselbe:
+    -warnaserror -warnNotAsError:NU1603,NU1608,NU1801,NU1900,NU1901,NU1902,NU1903,NU1904,NU1905,MSB3026
+    (Warnungen von NuGet, die vom Netz abhängen oder Lücken melden, prüft die Pipeline gesondert).
+    Der Stop-Hook in .claude/settings.json tut das für Claude Code.
   -->
   <PropertyGroup>
     <Nullable>enable</Nullable>

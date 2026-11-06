@@ -142,8 +142,9 @@ module "sso" {
   spa_extra_redirect_uris = local.auth_extra_redirect_uris
 
   app_roles = local.app_roles
-  # Ohne Angabe nur mit zugewiesener Rolle, wie in project.yaml voreingestellt.
-  assignment_required = try(local.cfg.auth.assignmentRequired, true)
+  # Ohne Angabe wie bisher false, damit ältere Projekte beim Update nicht still auf „Zuweisung
+  # erforderlich“ wechseln. project.yaml des Templates setzt true ausdrücklich.
+  assignment_required = try(local.cfg.auth.assignmentRequired, false)
   # Delegierte Tokens nimmt die API nur von zugelassenen Clients an; weitere aus project.yaml.
   additional_allowed_client_ids = try(local.cfg.auth.additionalClientIds, [])
   existing_registration = local.auth_existing == null ? null : {
