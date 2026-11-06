@@ -18,6 +18,11 @@ const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const TIMEOUT_MS = 3000;
 const GITHUB = 'https://github.com/blackforestsentinel';
 
+// Abschalten: Umgebungsvariable SEED_UPDATE_CHECK=0, etwa unter env in .claude/settings.local.json.
+if (process.env.SEED_UPDATE_CHECK === '0') {
+  process.exit(0);
+}
+
 let output = '';
 try {
   const outdated = await Promise.race([check(), sleep(TIMEOUT_MS + 1000).then(() => [])]);
@@ -57,11 +62,9 @@ async function check() {
 function collect() {
   const used = { pipelines: [], terraform: [], nuget: [], npm: [] };
 
-  const pipeline = read('azure-pipelines.yml');
-  // Der Ref gehört zum Repository-Eintrag mit name: blackforestsentinel/seed-pipelines.
-  const pipelineRef = pipeline?.match(/name:\s*['"]?blackforestsentinel\/seed-pipelines['"]?[\s\S]*?\bref:\s*['"]?refs\/tags\/(v\d+\.\d+\.\d+)/);
+  const pipelineRef = seedPipelinesRef(read('azure-pipelines.yml') ?? '');
   if (pipelineRef) {
-    used.pipelines.push({ version: pipelineRef[1], file: 'azure-pipelines.yml' });
+    used.pipelines.push({ version: pipelineRef, file: 'azure-pipelines.yml' });
   }
 
   for (const file of list('infra', (f) => f.endsWith('.tf'))) {
@@ -100,14 +103,44 @@ function collect() {
   return used;
 }
 
+// Ref aus dem Eintrag unter resources.repositories, dessen name blackforestsentinel/seed-pipelines
+// ist. Ein Eintrag beginnt mit "- " und endet beim nächsten oder bei einer Zeile, die nicht tiefer
+// eingerückt ist; ein ref außerhalb des Eintrags zählt nicht.
+function seedPipelinesRef(text) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const start = /^(\s*)-\s+\S/.exec(lines[i]);
+    if (!start) {
+      continue;
+    }
+    const indent = start[1].length;
+    const entry = { repository: false, name: null, ref: null };
+    for (let j = i; j < lines.length; j++) {
+      const line = lines[j];
+      if (j > i && line.trim() !== '' && !line.trim().startsWith('#') && line.search(/\S/) <= indent) {
+        break;
+      }
+      const key = j === i ? line.replace(/^\s*-\s+/, '') : line.trim();
+      entry.repository ||= /^repository:/.test(key);
+      entry.name ??= /^name:\s*['"]?([^'"\s#]+)/.exec(key)?.[1] ?? null;
+      entry.ref ??= /^ref:\s*['"]?refs\/tags\/(v\d+\.\d+\.\d+)['"]?\s*(?:#.*)?$/.exec(key)?.[1] ?? null;
+    }
+    if (entry.repository && entry.name?.toLowerCase() === 'blackforestsentinel/seed-pipelines' && entry.ref) {
+      return entry.ref;
+    }
+  }
+  return null;
+}
+
 // --- Neueste Versionen ------------------------------------------------------------------------
 
 function latestTag(repo) {
   const lookup = new Promise((resolve) => {
     execFile(
       'git',
-      ['ls-remote', '--tags', '--refs', `${GITHUB}/${repo}.git`],
-      { timeout: TIMEOUT_MS, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } },
+      // Öffentliche Repos: ohne Anmeldung und nie mit einem Dialog des Git Credential Managers.
+      ['-c', 'credential.helper=', 'ls-remote', '--tags', '--refs', `${GITHUB}/${repo}.git`],
+      { timeout: TIMEOUT_MS, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' } },
       (error, stdout) => resolve(error ? null : newest(stdout.split('\n').map((l) => l.split('refs/tags/')[1]))),
     );
   });
