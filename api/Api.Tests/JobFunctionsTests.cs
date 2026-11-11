@@ -14,6 +14,7 @@ namespace Api.Tests;
 public class JobFunctionsTests
 {
     private const string ObjectId = "aaaaaaaa-1111-2222-3333-444444444444";
+    private const string OtherObjectId = "bbbbbbbb-1111-2222-3333-444444444444";
 
     private readonly FakeJobTable jobs = new();
     private readonly FakeQueue queue = new();
@@ -22,7 +23,7 @@ public class JobFunctionsTests
     private JobFunctions Functions => new(jobs, queue, NullLogger<JobFunctions>.Instance);
 
     [Fact]
-    public async Task Create_StoresStatusAndQueuesMessage()
+    public async Task Create_StoresStatusAndQueuesMessageInOwnPartition()
     {
         var result = Assert.IsType<AcceptedResult>(await Functions.Create(Request("""{"input":"hallo"}"""), cancellationToken));
 
@@ -30,17 +31,19 @@ public class JobFunctionsTests
         Assert.Equal(JobState.Queued, response.Status);
         var (queueName, message) = Assert.Single(queue.Sent);
         Assert.Equal(JobFunctions.QueueName, queueName);
-        Assert.Equal(new JobMessage("anonymous", response.Id), message);
-        Assert.Equal("hallo", jobs.Rows[("anonymous", response.Id)].Input);
+        Assert.Equal(new JobMessage(ObjectId, response.Id), message);
+        Assert.Equal("hallo", jobs.Rows[(ObjectId, response.Id)].Input);
     }
 
     [Fact]
-    public async Task Create_SignedIn_UsesObjectIdAsPartition()
+    public async Task WithoutObjectId_FailsInsteadOfSharingAPartition()
     {
-        var result = Assert.IsType<AcceptedResult>(await Functions.Create(Request("""{"input":"hallo"}""", ObjectId), cancellationToken));
+        // Ohne oid gibt es keine Eigentümerin: lieber ein Fehler als eine gemeinsame Partition.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Functions.Create(Request("""{"input":"hallo"}""", objectId: null), cancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Functions.Get(Request(null, objectId: null), Guid.NewGuid().ToString("N"), cancellationToken));
 
-        var id = Assert.IsType<JobResponse>(result.Value).Id;
-        Assert.True(jobs.Rows.ContainsKey((ObjectId, id)));
+        Assert.Empty(jobs.Rows);
+        Assert.Empty(queue.Sent);
     }
 
     [Theory]
@@ -58,9 +61,9 @@ public class JobFunctionsTests
         var id = Guid.NewGuid().ToString("N");
         jobs.Rows[(ObjectId, id)] = new JobStatus { PartitionKey = ObjectId, RowKey = id, Input = "x" };
 
-        Assert.IsType<OkObjectResult>(await Functions.Get(Request(null, ObjectId), id, cancellationToken));
-        Assert.IsType<NotFoundResult>(await Functions.Get(Request(null), id, cancellationToken));
-        Assert.IsType<NotFoundResult>(await Functions.Get(Request(null, ObjectId), "../other", cancellationToken));
+        Assert.IsType<OkObjectResult>(await Functions.Get(Request(null), id, cancellationToken));
+        Assert.IsType<NotFoundResult>(await Functions.Get(Request(null, OtherObjectId), id, cancellationToken));
+        Assert.IsType<NotFoundResult>(await Functions.Get(Request(null), "../other", cancellationToken));
     }
 
     [Theory]
@@ -107,7 +110,7 @@ public class JobFunctionsTests
         Assert.Empty(jobs.Rows);
     }
 
-    private static HttpRequest Request(string? json, string? objectId = null)
+    private static HttpRequest Request(string? json, string? objectId = ObjectId)
     {
         var context = new DefaultHttpContext();
         if (objectId is not null)

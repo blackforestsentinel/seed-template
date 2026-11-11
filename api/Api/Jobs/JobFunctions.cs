@@ -121,11 +121,9 @@ public sealed class JobFunctions(ISeedTableRepository<JobStatus> jobs, ISeedQueu
     }
 
     /// <summary>
-    /// Jeder Job gehört der angemeldeten Person (PartitionKey = oid). Ohne angemeldete Person, etwa
-    /// in Tests, teilen sich alle eine Partition.
+    /// Jeder Job gehört der angemeldeten Person (PartitionKey = oid). Ohne <c>oid</c> wirft
+    /// ForUser, statt eine gemeinsame Partition zu wählen: Fehlt der Schutz der Function einmal,
+    /// endet die Anfrage mit einem Fehler und nicht in fremden Daten.
     /// </summary>
-    private static string Owner(HttpRequest request) =>
-        request.HttpContext.User.Identity?.IsAuthenticated == true
-            ? SeedPartitionKeys.ForUser(request.HttpContext.User)
-            : "anonymous";
+    private static string Owner(HttpRequest request) => SeedPartitionKeys.ForUser(request.HttpContext.User);
 }
