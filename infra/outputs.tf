@@ -25,7 +25,7 @@ output "function_app_name" {
 
   precondition {
     condition     = length(local.cors_invalid) == 0
-    error_message = "hosting.corsAllowedOrigins in project.yaml: ${join(", ", local.cors_invalid)} ist kein Origin. Erwartet wird https://<host> (oder http://) mit optionalem Port und ohne Pfad, etwa https://www.example.org, oder für eine Browser-Erweiterung chrome-extension://<erweiterungs-id> (32 Zeichen a bis p)."
+    error_message = "hosting.corsAllowedOrigins in project.yaml: ${join(", ", local.cors_invalid)} ist kein erlaubter Origin. Erwartet wird https://<host> mit optionalem Port und ohne Pfad, etwa https://www.example.org, oder für eine Browser-Erweiterung chrome-extension://<erweiterungs-id> (32 Zeichen a bis p). http:// geht nur für localhost und 127.0.0.1, etwa http://localhost:3000."
   }
 }
 
@@ -64,6 +64,11 @@ output "frontend_config" {
     condition     = local.sso || length(local.auth_extra_redirect_uris) == 0
     error_message = "auth.extraRedirectUris in project.yaml (auch unter environments) setzt features.sso voraus: In project.yaml sso: true setzen."
   }
+
+  precondition {
+    condition     = !local.sso || local.assignment_required != null
+    error_message = "auth.assignmentRequired in project.yaml fehlt oder ist kein true/false. Mit sso ausdrücklich angeben: true (empfohlen) gibt nur Personen, Gruppen und Anwendungen mit zugewiesener Rolle ein Token; false jedem Konto des Tenants, auch Gästen. Bisher galt ohne Angabe false; wer das beibehalten will, setzt assignmentRequired: false bewusst."
+  }
 }
 
 # Null ohne auth.directory; dann ändert sich am Plan bestehender Projekte nichts.
@@ -80,6 +85,11 @@ output "mcp_url" {
   precondition {
     condition     = !local.mcp || local.sso
     error_message = "features.mcp setzt features.sso voraus: In project.yaml sso: true setzen."
+  }
+
+  precondition {
+    condition     = !local.mcp || local.auth_existing == null || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", lower(local.auth_existing.mcpClientId)))
+    error_message = "features.mcp mit auth.existingRegistration.${var.environment} in project.yaml: mcpClientId fehlt oder ist keine Client-ID. Gemeint ist die MCP-Client-Registrierung im anderen Tenant: Die API nimmt delegierte Tokens nur von zugelassenen Clients an, und erst mit dieser ID gehört sie dazu. Was der Admin dort einrichtet: README von seed-terraform, Modul sso."
   }
 }
 

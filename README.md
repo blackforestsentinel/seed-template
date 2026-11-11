@@ -143,10 +143,10 @@ auth:
       description: Verwaltet die Anwendung
       memberTypes: [User]                  # User, Application oder beide
       capabilities: [settings.manage, jobs.run]
-  assignmentRequired: true                 # Standard: nur mit zugewiesener Rolle
+  assignmentRequired: true                 # mit sso Pflicht; true: nur mit zugewiesener Rolle
 ```
 
-- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. Mit `assignmentRequired: true` (Standard) holen nur Personen, Gruppen und Anwendungen mit einer Rolle überhaupt ein Token; nach dem ersten Apply kommt also erst jemand herein, wenn ein Admin ihm eine Rolle zugewiesen hat. Mit `false` bekommt jedes Konto des Tenants ein Token; Functions mit `[RequireCapability]` oder `[RequireAnyRole]` lehnen es ohne Rolle ab, solche mit `[AllowWithoutRole]` nicht. Fehlt der Schlüssel, gilt `false`, damit ältere Projekte beim Update nicht still umschalten.
+- **Infrastruktur:** Terraform legt je Rolle eine App-Rolle an der API-Registrierung an. Personen und Gruppen weist ein Admin in Entra zu (Enterprise App `<projekt>-<umgebung>-api`, „Benutzer und Gruppen“); die Pipeline darf das nicht. Mit `assignmentRequired: true` (Standard) holen nur Personen, Gruppen und Anwendungen mit einer Rolle überhaupt ein Token; nach dem ersten Apply kommt also erst jemand herein, wenn ein Admin ihm eine Rolle zugewiesen hat. Mit `false` bekommt jedes Konto des Tenants ein Token, auch Gäste; Functions mit `[RequireCapability]` oder `[RequireAnyRole]` lehnen es ohne Rolle ab, solche mit `[AllowWithoutRole]` nicht. Mit `sso` ist der Schlüssel Pflicht: Fehlt er oder ist er nicht `true`/`false`, scheitert der Plan mit einer Meldung. Früher galt ohne Angabe `false`; wer das beibehalten will, setzt `assignmentRequired: false` ausdrücklich.
 - **API:** `api/Api/Api.csproj` verlinkt `project.yaml` in die Build-Ausgabe; `Bfs.Seed.Auth` liest daraus die Zuordnung, lokal wie in Azure. `[RequireCapability("settings.manage")]` an Function oder Klasse verlangt eine Capability (sonst 403), `[RequireAnyRole]` irgendeine Rolle, `[AllowWithoutRole]` nur ein gültiges Token; `User.HasCapability(...)` prüft im Code. Welche Function was verlangt, zeigt die Spalte Capability unter [Endpunkte](#endpunkte). Eine Capability, die keine Rolle vergibt, lässt die App nicht starten; `AuthTests` findet solche Tippfehler schon im Build. Eine geänderte Zuordnung braucht nur einen Deploy, eine neue Rolle die Infrastruktur-Freigabe.
 - **Frontend:** `SeedUserProvider` lädt `GET /api/me`; `<IfCapability capability="settings.manage">` und `useCapabilities()` aus `@blackforestsentinel/seed-web-auth/react` blenden Elemente ein oder aus. Das Frontend kennt die Zuordnung nicht, und die Prüfung macht immer die API. Das Benutzermenü zeigt den Anzeigenamen der Rolle; wer angemeldet ist, aber keine Capability hat, sieht statt der Inhalte `AccessDenied` mit der Erklärung, wen man fragen muss (`frontend/src/App.tsx`).
 - **Dienste ohne angemeldete Person:** Eine Rolle mit `memberTypes: [Application]` erlaubt App-only-Tokens (Client-Credentials-Flow); die aufrufende Anwendung bekommt die Rolle als Anwendungsberechtigung. Tokens ohne passende Rolle lehnt die API ab.
@@ -165,9 +165,15 @@ auth:
       apiClientId: <client-id der API>
       spaClientId: <client-id der SPA>
       apiScope: api://<client-id der API>/access_as_user
+      mcpClientId: <client-id der MCP-Client-Registrierung>         # mit features.mcp Pflicht
+      mcpPreauthorizedClientIds: [<client-id>]                    # optional
+      connectorClientId: <client-id der Connector-Registrierung>   # optional
 ```
 
 Terraform legt dann für diese Umgebung keine Registrierungen an; API und Frontend melden sich im angegebenen Tenant an. Was der Admin dort einrichten muss (Redirect-URIs samt Bridge-Seite, Vorautorisierung der SPA, App-Rollen gemäß `auth.roles`, Zuweisungen), steht in der README von [seed-terraform](https://github.com/blackforestsentinel/seed-terraform) beim Modul `sso`.
+
+- **Scope nur mit Admin-Einwilligung:** Der Admin stellt den Scope der API (`access_as_user`) auf „Administratoren“ statt „Administratoren und Benutzer“ und autorisiert die SPA dafür vor. Sonst kann eine Person einer fremden App zustimmen, die dann Tokens für die API bekommt.
+- **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von der SPA, von `mcpClientId` (MCP-Client-Registrierung), `mcpPreauthorizedClientIds` (Clients, die der Admin für `mcp_access` vorautorisiert hat, etwa VS Code), `connectorClientId` (Client-Registrierung eines Custom Connectors) und `auth.additionalClientIds` an. Mit `features.mcp` verlangt der Plan `mcpClientId`.
 
 #### Personen und Profilbilder
 
@@ -193,7 +199,7 @@ auth:
 | `roleFilter` | `Application.Read.All`, `GroupMember.Read.All` | wer der API über eine App-Rolle zugewiesen ist, auch über Gruppen | immer Admin |
 | `servicePrincipals` | `Application.Read.All` | Anwendungen und verwaltete Identitäten in der Personenauswahl (`principalTypes`) und in Labels und Karten | immer Admin |
 
-Delegiert heißt: Das Frontend sieht nur, was die angemeldete Person auch in Outlook und Teams sieht, und Einstellungen des Tenants wie ausgeblendete Fotos gelten weiter.
+Delegiert heißt: Das Frontend sieht nur, was die angemeldete Person auch in Outlook und Teams sieht, und Einstellungen des Tenants wie ausgeblendete Fotos gelten weiter. Für `roleFilter` und `servicePrincipals` gilt das nicht: Sie erlauben nach der Administratorzustimmung, alle App-Registrierungen, Rollenzuweisungen und Gruppenmitgliedschaften des Tenants zu lesen (siehe [Sicherheit im Betrieb](#sicherheit-im-betrieb)).
 
 **Einmal je Umgebung von Hand zustimmen.** Die Pipeline darf keine Einwilligung erteilen. Nach dem Apply im Entra Admin Center → App-Registrierungen → `<projekt>-<umgebung>-web` → **API-Berechtigungen** → **Administratorzustimmung für „&lt;Tenant&gt;“ erteilen**, oder als Admin `az ad app permission admin-consent --id <spa-client-id>`. Der Terraform-Output `directory_permissions` am Ende des Apply-Logs nennt Client-ID, Berechtigungen und den Befehl.
 
@@ -361,7 +367,7 @@ storage:
 
 - **Infrastruktur:** Terraform (`infra/storage.tf`, Modul `storage` aus seed-terraform) legt einen eigenen Storage Account an, getrennt vom Host-Storage der Function: ohne Shared Key, TLS 1.2, ohne öffentlichen Blob-Zugriff. Die Managed Identity der Function bekommt Blob, Queue und Table Data Contributor. Versionierung und Soft Delete sind an; `retention:` und `lifecycle:` in `project.yaml` steuern Aufbewahrung und Löschfristen (kommentiertes Beispiel dort). Die App-Settings `Seed__Features__Storage` und `SeedStorage__*` beschreiben die Verbindung `SeedStorage` per Managed Identity.
 - **API:** `Program.cs` schaltet `builder.AddSeedStorage()` über `Seed__Features__Storage` ein. Dann gibt es Clients für Table, Blob und Queue, `ISeedTableRepository<T>` mit ETag und `ISeedQueueSender`; Queue-Trigger nutzen `Connection = "SeedStorage"`. Details in der README von [`Bfs.Seed.Storage`](https://github.com/blackforestsentinel/seed-packages/tree/main/dotnet/src/Bfs.Seed.Storage).
-- **Beispiel `api/Api/Jobs`:** `POST /api/jobs` legt einen Job-Status in der Tabelle `jobs` an und stellt eine Nachricht in die Queue `jobs`; die Queue-Function `ProcessJob` verarbeitet ihn und schreibt Status und Ergebnis zurück; `GET /api/jobs/{id}` liest den Status. `CreateJob` und `GetJob` verlangen die Capability `jobs.run` (in `project.yaml` bei der Rolle Admin) und damit `sso`; ohne sso schaltet `infra/main.tf` sie ab. Jeder Job gehört der angemeldeten Person (PartitionKey = `oid`), andere finden ihn nicht. Ohne `storage` schaltet `infra/storage.tf` die drei Functions per `AzureWebJobs.<Name>.Disabled` ab und setzt einen Platzhalter für die Verbindung, weil der Host einen Queue-Trigger auch abgeschaltet indiziert und ohne Verbindung bei jedem Start einen Fehler meldet. Wer das Beispiel löscht oder umbenennt, passt die Liste `storage_example_functions` dort an.
+- **Beispiel `api/Api/Jobs`:** `POST /api/jobs` legt einen Job-Status in der Tabelle `jobs` an und stellt eine Nachricht in die Queue `jobs`; die Queue-Function `ProcessJob` verarbeitet ihn und schreibt Status und Ergebnis zurück; `GET /api/jobs/{id}` liest den Status. `CreateJob` und `GetJob` verlangen die Capability `jobs.run` (in `project.yaml` bei der Rolle Admin) und damit `sso`; ohne sso schaltet `infra/main.tf` sie ab. Jeder Job gehört der angemeldeten Person (PartitionKey = `oid`), andere finden ihn nicht; ohne `oid` endet die Anfrage mit einem Fehler statt in einer gemeinsamen Partition. Ohne `storage` schaltet `infra/storage.tf` die drei Functions per `AzureWebJobs.<Name>.Disabled` ab und setzt einen Platzhalter für die Verbindung, weil der Host einen Queue-Trigger auch abgeschaltet indiziert und ohne Verbindung bei jedem Start einen Fehler meldet. Wer das Beispiel löscht oder umbenennt, passt die Liste `storage_example_functions` dort an.
 
 **Fehler und Poison-Queue:** Wirft eine Queue-Function, stellt die Queue die Nachricht nach 30 Sekunden erneut zu (`host.json`: `visibilityTimeout`), höchstens fünfmal (`maxDequeueCount`). Danach verschiebt der Host sie in `<queue>-poison` (hier `jobs-poison`), die er selbst anlegt. Dort verarbeitet sie niemand; nach 7 Tagen verfällt sie. Nachrichten kommen mindestens einmal an, die Verarbeitung muss also wiederholbar sein; das Beispiel prüft dafür den Status in der Tabelle.
 
@@ -416,7 +422,7 @@ Das Dokument entsteht bei jedem Build unter `api/Api/bin/<Konfiguration>/net10.0
 **Weitere Angaben in `project.yaml`:**
 
 - `displayName`: Name in der Power Platform, höchstens 30 Zeichen aus Buchstaben ohne Umlaute, Ziffern, Leerzeichen, `-` und `_` (Standard: `<project> <umgebung>`); anderes lehnt die Power Platform ab, der Plan prüft es vorher.
-- `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API.
+- `shareWith`: `everyone` (Standard) gibt allen Personen der Power-Platform-Umgebung Lesezugriff auf den Connector, `none` nur der Pipeline und Admins. Ohne Lesezugriff sieht eine Person den Connector nicht; was sie über ihn darf, regeln trotzdem App-Rollen und Capabilities der API. Ein Flow ruft die API aber mit der Identität des Verbindungsbesitzers auf, auch wenn andere ihn auslösen (siehe [Sicherheit im Betrieb](#sicherheit-im-betrieb)).
 - `iconBrandColor`: Farbe des Symbols, Standard `#007ee5`.
 
 **Operationen ablösen:** Flows rufen Operationen über ihre operationId auf. Eine Operation deshalb nicht einfach entfernen oder umbenennen, sondern erst als deprecated markieren, mit `[OpenApiOperation(…, Deprecated = true, DeprecationMessage = "Stattdessen …")]` oder `[Obsolete("Stattdessen …")]` an der Methode (README von `Bfs.Seed.OpenApi`, „Operationen ablösen“). Neue Flows können sie dann nicht mehr wählen, bestehende laufen weiter, und die Pipeline warnt je Flow, der sie noch nutzt. Entfernen erst, wenn keiner sie mehr nutzt.
@@ -532,7 +538,7 @@ hosting:
   corsAllowedOrigins: [https://www.example.org, https://example.org]
 ```
 
-- **Origins**, nicht URLs: Schema, Host und optional Port, ohne Pfad und ohne Schrägstrich am Ende. `*` gibt es nicht; der Smoke-Test der Pipeline prüft, dass ein fremder Origin abgelehnt wird.
+- **Origins**, nicht URLs: Schema, Host und optional Port, ohne Pfad und ohne Schrägstrich am Ende. `https://`, nur für `localhost` und `127.0.0.1` auch `http://`; anderes hält der Plan auf. `*` gibt es nicht; der Smoke-Test der Pipeline prüft, dass ein fremder Origin abgelehnt wird.
 - **Je Umgebung** unter `environments.<name>.hosting.corsAllowedOrigins`; die Liste dort ersetzt die allgemeine.
 - **Browser-Erweiterungen** kommen als `chrome-extension://<erweiterungs-id>` dazu (32 Zeichen `a` bis `p`), siehe [Browser-Erweiterungen](#browser-erweiterungen).
 - **CORS ist kein Zugriffsschutz.** Es regelt nur, ob ein Browser die Antwort an das Skript der fremden Seite weitergibt. Was eine Route ohne Token preisgibt, schützt `[AllowAnonymous]` bzw. dessen Fehlen, nicht CORS.
@@ -641,7 +647,18 @@ Warum `'self'` statt `'none'` bei `frame-ancestors`: MSAL holt Tokens notfalls i
 
 `'unsafe-inline'` für Styles ist nicht nötig: Vite legt CSS als Datei ab, React setzt `style`-Attribute per DOM-API, die die CSP nicht betrifft. Wer eine Bibliothek ergänzt, die Styles zur Laufzeit als `<style>` einfügt, oder externe Dienste aufruft (Schriften, Telemetrie, weitere APIs), erweitert die passende Direktive. Lokal (`npm run dev`) gilt die CSP nicht; sie wirkt nur in der Static Web App.
 
-Die eingebauten Anmeldewege der Static Web App sind gesperrt, weil die Anmeldung per MSAL läuft: `/.auth/login/aad` und `/.auth/login/github` (die beiden vorkonfigurierten Anbieter) liefern 404. Azure sperrt Anbieter nur über diese exakten Routen; eine Wildcard-Route auf `/.auth/*` greift nicht. Ohne Anmeldung bleibt `/.auth/me` leer (`clientPrincipal: null`).
+Die eingebauten Anmeldewege der Static Web App sind gesperrt, weil die Anmeldung per MSAL läuft: `/.auth/login/aad` und `/.auth/login/github` (die beiden vorkonfigurierten Anbieter) liefern 404. Azure sperrt Anbieter nur über diese exakten Routen; eine Wildcard-Route auf `/.auth/*` greift nicht. Die Sperre ist unvollständig: Routen vergleicht Azure mit Groß- und Kleinschreibung, die Anmeldung der Static Web App nicht, und `/.auth/logout`, `/.auth/me` und `/.auth/purge/*` bleiben erreichbar. Das Projekt verlässt sich deshalb nicht auf diese Anmeldung: Die API prüft nur ihre eigenen Tokens, und `staticwebapp.config.json` nutzt keine `allowedRoles`. Ohne Anmeldung bleibt `/.auth/me` leer (`clientPrincipal: null`).
+
+## Sicherheit im Betrieb
+
+Was beim Betrieb eines Projekts aus diesem Template zu wissen ist. Schwachstellen melden und welche Versionen Korrekturen bekommen: [SECURITY.md](SECURITY.md).
+
+- **Die API schützt nur ihre Token-Prüfung.** Function App, Storage und Key Vault haben keine Netzwerkbeschränkung. Die Static Web App schützt `/api` nicht: Die Function hat einen eigenen Origin und ist direkt aus dem Internet erreichbar. Einzige Tür ist die Token-Prüfung in der API (`sso`) mit den Attributen je Function; CORS ist kein Zugriffsschutz.
+- **`assignmentRequired: true` lassen.** Dann bekommt nur ein Token für die API, wem ein Admin eine Rolle zugewiesen hat. Mit `false` bekommt jedes Konto des Tenants eines, auch Gäste, und Functions mit `[AllowWithoutRole]` stehen allen offen. Mit `sso` verlangt der Plan den Schlüssel ausdrücklich.
+- **Vorhandene App-Registrierung:** Der Scope der API braucht dort Admin-Einwilligung, und die SPA ist dafür vorautorisiert; sonst bekommt jede App, der eine Person zustimmt, Tokens für die API (siehe [Vorhandene App-Registrierung](#vorhandene-app-registrierung-auch-aus-einem-anderen-tenant)).
+- **`auth.directory.roleFilter` und `servicePrincipals`** tragen an der SPA delegiert `Application.Read.All` bzw. `GroupMember.Read.All` ein, mit Administratorzustimmung für den ganzen Tenant. Ein Token der SPA, auch außerhalb der App geholt, darf dann alle App-Registrierungen, Service Principals, Rollenzuweisungen und Gruppenmitgliedschaften lesen. `assignmentRequired` wirkt nur an der API-Registrierung, nicht an der SPA. Nur einschalten, wenn das für alle Konten des Tenants vertretbar ist, und nur mit `assignmentRequired: true`.
+- **Custom Connector:** Er bekommt den vollen Scope `access_as_user`; was eine Person im Browser darf, darf jeder Flow mit ihrer Verbindung. Ein Flow ruft die API mit der Identität des Verbindungsbesitzers auf, auch wenn andere ihn auslösen. Wer einen Flow teilt oder über einen Trigger für andere auslösbar macht, gibt damit seine Rechte an der API weiter. Mit `shareWith: everyone` (Standard) kann jede Person der Power-Platform-Umgebung den Connector nutzen.
+- **MCP:** Mit Administratorzustimmung (`offline_access`) und Vorautorisierung bekommen MCP-Clients ohne Einwilligungsdialog Refresh-Tokens für die API. Sie liegen beim Anbieter des Clients, bei claude.ai also bei Anthropic, und erneuern den Zugriff ohne neue Anmeldung. Wer das nicht will, schaltet `mcp` nicht ein. Conditional Access gegen den Device-Code-Flow ist empfehlenswert, weil vorautorisierte Clients wie VS Code ihn nutzen können.
 
 ## Lizenz
 
