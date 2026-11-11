@@ -36,8 +36,9 @@ locals {
   # Zusätzliche Origins für die CORS-Freigabe der Function, etwa eine Website, die eine öffentliche
   # Route aus dem Browser aufruft, oder eine Browser-Erweiterung (chrome-extension://<id>). Static
   # Web App und eigene Domains sind immer freigegeben, in dev zusätzlich der lokale Vite-Server.
+  # http:// nur für localhost und 127.0.0.1 (lokale Entwicklung), sonst https://.
   cors_extra_origins = try([for origin in local.hosting.corsAllowedOrigins : trimsuffix(lower(origin), "/")], [])
-  cors_invalid       = [for origin in local.cors_extra_origins : origin if !can(regex("^(https?://[a-z0-9.-]+(:[0-9]+)?|chrome-extension://[a-p]{32})$", origin))]
+  cors_invalid       = [for origin in local.cors_extra_origins : origin if !can(regex("^(https://[a-z0-9.-]+(:[0-9]+)?|http://(localhost|127[.]0[.]0[.]1)(:[0-9]+)?|chrome-extension://[a-p]{32})$", origin))]
   cors_allowed_origins = distinct(concat(
     var.environment == "dev" ? ["http://localhost:5173"] : [],
     local.cors_extra_origins,
@@ -70,6 +71,9 @@ locals {
       allowed_member_types = try(role.memberTypes, ["User"])
     }
   }, {})
+  # Zuweisung erforderlich (auth.assignmentRequired): mit sso ausdrücklich anzugeben, true oder
+  # false. Fehlt der Schlüssel, hält die Prüfung am Output frontend_config den Plan auf.
+  assignment_required = try(tobool(local.cfg.auth.assignmentRequired), null)
   # Vorhandene App-Registrierung für diese Umgebung, sonst legt sso sie an.
   auth_existing = try(local.cfg.auth.existingRegistration[var.environment], null)
   # Personen-Komponenten im Frontend (nur mit sso und Frontend in Gebrauch): auth.directory,
@@ -142,9 +146,8 @@ module "sso" {
   spa_extra_redirect_uris = local.auth_extra_redirect_uris
 
   app_roles = local.app_roles
-  # Ohne Angabe wie bisher false, damit ältere Projekte beim Update nicht still auf „Zuweisung
-  # erforderlich“ wechseln. project.yaml des Templates setzt true ausdrücklich.
-  assignment_required = try(local.cfg.auth.assignmentRequired, false)
+  # Nur false, wenn project.yaml es ausdrücklich sagt; ohne Angabe scheitert der Plan ohnehin.
+  assignment_required = local.assignment_required != false
   # Delegierte Tokens nimmt die API nur von zugelassenen Clients an; weitere aus project.yaml.
   additional_allowed_client_ids = try(local.cfg.auth.additionalClientIds, [])
   existing_registration = local.auth_existing == null ? null : {
@@ -153,6 +156,11 @@ module "sso" {
     spa_client_id = try(local.auth_existing.spaClientId, null)
     api_scope     = local.auth_existing.apiScope
     audience      = try(local.auth_existing.audience, null)
+    # Clients der Registrierungen im anderen Tenant: Die API nimmt delegierte Tokens nur von ihnen,
+    # der SPA und auth.additionalClientIds an. mcpClientId verlangt der Plan mit features.mcp.
+    mcp_client_id                = try(local.auth_existing.mcpClientId, null)
+    connector_client_id          = try(local.auth_existing.connectorClientId, null)
+    mcp_preauthorized_client_ids = try(compact(flatten([local.auth_existing.mcpPreauthorizedClientIds])), null)
   }
 
   # Personen-Komponenten (seed-web-people): delegierte Graph-Berechtigungen an der SPA und
