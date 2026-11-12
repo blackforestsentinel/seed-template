@@ -10,7 +10,7 @@ owner: ""
 features:
   # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false
-  # MCP-Server unter /api/mcp für Claude, VS Code und andere KI-Werkzeuge, setzt sso voraus
+  # MCP-Server unter /api/mcp für Claude und andere KI-Werkzeuge, setzt sso voraus
   mcp: false
   # Eigener Storage Account (Table, Blob, Queue) mit Managed-Identity-Zugriff, Einstellungen
   # unter storage: (unten)
@@ -77,7 +77,6 @@ auth:
   #     # Weitere Clients dort, deren delegierte Tokens die API annimmt; mcpClientId ist mit
   #     # features.mcp Pflicht.
   #     mcpClientId: 00000000-0000-0000-0000-000000000000          # MCP-Client-Registrierung
-  #     mcpPreauthorizedClientIds: [00000000-0000-0000-0000-000000000000]   # für mcp_access vorautorisiert
   #     connectorClientId: 00000000-0000-0000-0000-000000000000    # Client-Registrierung eines Connectors
   # Weitere Redirect-URIs der SPA ohne Bridge-Seite, etwa für eine Browser-Erweiterung (README,
   # „Browser-Erweiterungen“); meist je Umgebung:
@@ -88,14 +87,11 @@ auth:
 
 # Nur mit features.mcp, alles optional:
 # mcp:
-#   # Eigene, im Tenant verifizierte Domain der Function. Claude und Claude Code brauchen sie,
-#   # VS Code nicht. DNS, Bindung und Zertifikat: README, Abschnitt mcp.
+#   # Eigene, im Tenant verifizierte Domain der Function; Claude und Claude Code brauchen sie.
+#   # DNS, Bindung und Zertifikat: README, Abschnitt mcp.
 #   customDomain: mcp.example.org
 #   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
 #   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]
-#   # Weitere Clients mit eigener Entra-Registrierung, die mcp_access ohne Einwilligungsdialog
-#   # bekommen und deren Tokens die API annimmt, etwa VS Code. Standard leer; README, Abschnitt mcp.
-#   preauthorizedClientIds: [aebc6443-996d-45c2-90f0-388ff96faa56]
 
 # Nur mit features.customConnector. Die Pipeline legt den Connector nach dem Deploy aus dem
 # OpenAPI-Dokument der API an (README, Abschnitt customConnector). Ohne environmentUrl entsteht in

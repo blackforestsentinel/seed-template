@@ -166,14 +166,13 @@ auth:
       spaClientId: <client-id der SPA>
       apiScope: api://<client-id der API>/access_as_user
       mcpClientId: <client-id der MCP-Client-Registrierung>         # mit features.mcp Pflicht
-      mcpPreauthorizedClientIds: [<client-id>]                    # optional
       connectorClientId: <client-id der Connector-Registrierung>   # optional
 ```
 
 Terraform legt dann für diese Umgebung keine Registrierungen an; API und Frontend melden sich im angegebenen Tenant an. Was der Admin dort einrichten muss (Redirect-URIs samt Bridge-Seite, Vorautorisierung der SPA, App-Rollen gemäß `auth.roles`, Zuweisungen), steht in der README von [seed-terraform](https://github.com/blackforestsentinel/seed-terraform) beim Modul `sso`.
 
 - **Scope nur mit Admin-Einwilligung:** Der Admin stellt den Scope der API (`access_as_user`) auf „Administratoren“ statt „Administratoren und Benutzer“ und autorisiert die SPA dafür vor. Sonst kann eine Person einer fremden App zustimmen, die dann Tokens für die API bekommt.
-- **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von der SPA, von `mcpClientId` (MCP-Client-Registrierung), `mcpPreauthorizedClientIds` (Clients, die der Admin für `mcp_access` vorautorisiert hat, etwa VS Code), `connectorClientId` (Client-Registrierung eines Custom Connectors) und `auth.additionalClientIds` an. Mit `features.mcp` verlangt der Plan `mcpClientId`.
+- **Zugelassene Clients:** Delegierte Tokens nimmt die API nur von der SPA, von `mcpClientId` (MCP-Client-Registrierung), `connectorClientId` (Client-Registrierung eines Custom Connectors) und `auth.additionalClientIds` an. Mit `features.mcp` verlangt der Plan `mcpClientId`.
 
 #### Personen und Profilbilder
 
@@ -221,11 +220,11 @@ environments:
 
 ### mcp: MCP-Server für KI-Werkzeuge
 
-Stellt unter `/api/mcp` einen MCP-Server bereit, über den Claude, VS Code und andere KI-Werkzeuge im Namen der angemeldeten Person Werkzeuge der API aufrufen. Setzt `sso` voraus; ohne `sso` scheitert schon der Plan.
+Stellt unter `/api/mcp` einen MCP-Server bereit, über den Claude und andere KI-Werkzeuge im Namen der angemeldeten Person Werkzeuge der API aufrufen. Setzt `sso` voraus; ohne `sso` scheitert schon der Plan.
 
 In `project.yaml` `mcp: true` setzen und pushen:
 
-- **Infrastruktur:** Das Modul `sso` legt den Scope `mcp_access` an der API an, eine öffentliche Client-Registrierung `<projekt>-<umgebung>-mcp` für Claude und Claude Code und autorisiert sie für `mcp_access` vor. Weitere Clients mit eigener Entra-Registrierung, etwa VS Code, kommen nur über `mcp.preauthorizedClientIds` dazu (siehe [Verbinden mit Claude und VS Code](#verbinden-mit-claude-und-vs-code)). `mcp_access` gilt nur für den MCP-Endpunkt: Ein Token, das ein KI-Werkzeug bekommt, erreicht die übrige API nicht.
+- **Infrastruktur:** Das Modul `sso` legt den Scope `mcp_access` an der API an, eine öffentliche Client-Registrierung `<projekt>-<umgebung>-mcp` für Claude und Claude Code und autorisiert sie für `mcp_access` vor; andere Clients autorisiert es nicht vor (siehe [Sicherheit im Betrieb](#sicherheit-im-betrieb)). `mcp_access` gilt nur für den MCP-Endpunkt: Ein Token, das ein KI-Werkzeug bekommt, erreicht die übrige API nicht.
 - **API:** `Program.cs` schaltet `builder.AddSeedMcp()` über `Seed__Features__Mcp` ein. Der Endpunkt arbeitet zustandslos (Streamable HTTP), passt also zu Flex Consumption mit beliebig vielen Instanzen. Die Metadaten nach RFC 9728 liegen unter `/api/.well-known/oauth-protected-resource`; jede 401-Antwort verweist darauf, so finden Clients Entra als Anmeldeserver.
 - **Werkzeuge:** Klassen mit `[McpServerToolType]` in `api/Api/Mcp/`, Methoden mit `[McpServerTool]` und `[Description]` (Beispiel: `BeispielTools.cs`). Argumente prüft der Endpunkt gegen das Schema, das aus den Parametern entsteht; unbekannte Argumente lehnt er ab, statt sie zu ignorieren. Ein Parameter `ClaimsPrincipal` liefert die angemeldete Person, weitere Parameter und der Konstruktor bekommen Dienste aus der Dependency Injection.
 - **Berechtigungen:** `[RequireCapability("…")]` an Methode oder Klasse. Ein Werkzeug erscheint in `tools/list` nur, wenn die Person alle verlangten Capabilities hat; ein Aufruf ohne sie liefert eine Fehlermeldung mit der fehlenden Berechtigung. Capabilities folgen aus App-Rollen (siehe `sso`).
@@ -234,7 +233,7 @@ Nach dem ersten Apply einmal je Umgebung im Entra Admin Center an der Registrier
 
 #### Eigene Domain für Claude
 
-Claude und Claude Code senden die MCP-Adresse bei der Anmeldung als `resource` (RFC 8707). Entra stellt nur dann ein Token aus, wenn diese Adresse als Application ID URI an der API-Registrierung steht, und lässt dort nur Domains zu, die im Tenant verifiziert sind. Über den Standardnamen `func-….azurewebsites.net` scheitert die Anmeldung deshalb nach dem Login mit `AADSTS9010010`. VS Code meldet sich ohne `resource` an und braucht keine eigene Domain, wohl aber den Eintrag in `mcp.preauthorizedClientIds`.
+Claude und Claude Code senden die MCP-Adresse bei der Anmeldung als `resource` (RFC 8707). Entra stellt nur dann ein Token aus, wenn diese Adresse als Application ID URI an der API-Registrierung steht, und lässt dort nur Domains zu, die im Tenant verifiziert sind. Über den Standardnamen `func-….azurewebsites.net` scheitert die Anmeldung deshalb nach dem Login mit `AADSTS9010010`.
 
 1. Die Domain (oder eine übergeordnete, etwa `example.org` für `mcp.example.org`) muss im Tenant verifiziert sein: Entra Admin Center → Einstellungen → Domänennamen.
 2. In `project.yaml` eintragen und pushen; der Plan zeigt eine neue Application ID URI und das App-Setting `Mcp__Resource`:
@@ -258,28 +257,9 @@ Claude und Claude Code senden die MCP-Adresse bei der Anmeldung als `resource` (
 
 DNS, Bindung und Zertifikat liegen bewusst nicht in Terraform: Die Bindung verlangt die DNS-Einträge schon beim Apply, und die Zone liegt meist nicht in Azure. Wird die Function App neu angelegt, die Schritte 3 und 4 wiederholen.
 
-#### Verbinden mit Claude und VS Code
+#### Verbinden mit Claude
 
 Werte aus den Terraform-Outputs: `mcp_url` (mit eigener Domain deren Adresse, sonst die der Function) und `mcp_client_id`. Die Adresse genau so eintragen: Kleinbuchstaben, mit `/api/mcp`, ohne Schrägstrich am Ende.
-
-**VS Code** (funktioniert auch ohne eigene Domain): VS Code meldet sich bei Entra mit der Registrierung von Microsoft an, nicht mit `<projekt>-<umgebung>-mcp`. Sie muss in `project.yaml` stehen, sonst antwortet die API mit 401; der nächste Plan zeigt die Vorautorisierung und einen weiteren Eintrag in `Auth__AllowedClientIds`:
-
-```yaml
-mcp:
-  preauthorizedClientIds: [aebc6443-996d-45c2-90f0-388ff96faa56]   # VS Code
-```
-
-Dann in `.vscode/mcp.json`
-
-```json
-{
-  "servers": {
-    "my-app": { "type": "http", "url": "https://func-my-app-dev-abc123.azurewebsites.net/api/mcp" }
-  }
-}
-```
-
-Dann **MCP: List Servers** → Server starten → mit Microsoft anmelden. Eine Client-ID braucht die Konfiguration nicht. Ein vorautorisierter öffentlicher Client von Microsoft kann auch den Device-Code-Flow nutzen, siehe [Sicherheit im Betrieb](#sicherheit-im-betrieb). Lokal geht das genauso gegen `http://localhost:7071/api/mcp`, wenn `local.settings.json` `Seed__Features__Sso`, `Seed__Features__Mcp` und die `Auth__*`-Werte der dev-Umgebung setzt.
 
 **Claude** (claude.ai, Desktop, Mobil; braucht die eigene Domain): In Team- und Enterprise-Organisationen legt ein Owner den Connector einmal an (**Organization settings → Connectors → Add → Custom**), Mitglieder verbinden sich danach unter **Customize → Connectors** selbst; mit Pro oder Max **Customize → Connectors → Add custom connector**. Name frei, URL = `mcp_url`, unter **Advanced settings** OAuth Client ID = `mcp_client_id`, OAuth Client Secret **leer** lassen; Claude meldet sich dann als öffentlicher Client mit PKCE an. Die Anmeldedaten lassen sich später nicht ändern; für eine andere Client-ID den Connector entfernen und neu anlegen.
 
@@ -291,7 +271,9 @@ claude mcp add --transport http --client-id <mcp_client_id> --callback-port 8080
 
 Danach in Claude Code `/mcp` → Server wählen → **Authenticate**. Der Port ist frei wählbar, Entra ignoriert ihn bei `http://localhost/callback`.
 
-**Andere Clients:** Die API nimmt delegierte Tokens nur von zugelassenen Clients an: Frontend, Custom Connector, die MCP-Client-Registrierung und die Clients aus `mcp.preauthorizedClientIds`. Ein anderer Client mit eigener Entra-Registrierung kommt mit seiner Client-ID in `auth.additionalClientIds` in `project.yaml` dazu, sonst antwortet die API mit 401. Braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Clients, die ein Client-Secret verlangen, etwa Copilot Studio, unterstützt das Feature nicht; dafür ist der Custom Connector vorgesehen.
+**Andere Clients:** Die API nimmt delegierte Tokens nur von zugelassenen Clients an: Frontend, Custom Connector und die MCP-Client-Registrierung. Ein Client, der wie Claude eine Client-ID annimmt, nutzt `mcp_client_id`; braucht er eine eigene Redirect-URI an der Registrierung, kommt sie über `mcp.redirectUris` in `project.yaml` dazu (die Liste ersetzt die Standardwerte, also Claude und Claude Code mit aufführen). Ein Client mit eigener Entra-Registrierung kommt mit seiner Client-ID in `auth.additionalClientIds` dazu, sonst antwortet die API mit 401; keine öffentlichen Clients von Microsoft wie VS Code eintragen (siehe [Sicherheit im Betrieb](#sicherheit-im-betrieb)).
+
+**Microsoft Copilot:** Copilot Studio und Microsoft 365 Copilot verlangen einen OAuth-Client mit Client-Secret; das unterstützt das Feature nicht. Beide erreichen die API über den [Custom Connector](#customconnector-power-automate-power-apps-und-copilot-studio).
 
 **Fehlerbilder:** `AADSTS9010010` nach der Anmeldung: eigene Domain fehlt oder die URL im Client weicht von `mcp_url` ab. Einwilligungsdialog oder `AADSTS65001`: Administratorzustimmung fehlt. Werkzeug fehlt in der Liste: Der Person fehlt die Capability (Werkzeug `ueberblick_abrufen` zeigt Rollen und Berechtigungen). Conditional Access mit Standortbedingung: Claude holt und erneuert Tokens von Anthropics Adressen (`160.79.104.0/21`), nicht vom Rechner der Person.
 
@@ -666,7 +648,7 @@ Was beim Betrieb eines Projekts aus diesem Template zu wissen ist. Schwachstelle
 - **Vorhandene App-Registrierung:** Der Scope der API braucht dort Admin-Einwilligung, und die SPA ist dafür vorautorisiert; sonst bekommt jede App, der eine Person zustimmt, Tokens für die API (siehe [Vorhandene App-Registrierung](#vorhandene-app-registrierung-auch-aus-einem-anderen-tenant)).
 - **`auth.directory.roleFilter` und `servicePrincipals`** tragen an der SPA delegiert `Application.Read.All` bzw. `GroupMember.Read.All` ein, mit Administratorzustimmung für den ganzen Tenant. Ein Token der SPA, auch außerhalb der App geholt, darf dann alle App-Registrierungen, Service Principals, Rollenzuweisungen und Gruppenmitgliedschaften lesen. `assignmentRequired` wirkt nur an der API-Registrierung, nicht an der SPA. Terraform schaltet deshalb an der Enterprise App der SPA „Zuweisung erforderlich“ ein; nur zugewiesene Personen und Gruppen bekommen ein Token für Graph (siehe [Personen und Profilbilder](#personen-und-profilbilder)). `assignmentRequired` an der API ist davon unabhängig.
 - **Custom Connector:** Er bekommt den vollen Scope `access_as_user`; was eine Person im Browser darf, darf jeder Flow mit ihrer Verbindung. Ein Flow ruft die API mit der Identität des Verbindungsbesitzers auf, auch wenn andere ihn auslösen. Wer einen Flow teilt oder über einen Trigger für andere auslösbar macht, gibt damit seine Rechte an der API weiter. Mit `shareWith: everyone` (Standard) kann jede Person der Power-Platform-Umgebung den Connector nutzen.
-- **MCP:** Mit Administratorzustimmung (`offline_access`) und Vorautorisierung bekommen MCP-Clients ohne Einwilligungsdialog Refresh-Tokens für die API. Sie liegen beim Anbieter des Clients, bei claude.ai also bei Anthropic, und erneuern den Zugriff ohne neue Anmeldung. Wer das nicht will, schaltet `mcp` nicht ein. Conditional Access gegen den Device-Code-Flow ist empfehlenswert, weil ein vorautorisierter öffentlicher Client von Microsoft (`mcp.preauthorizedClientIds`, etwa VS Code) ihn nutzen kann.
+- **MCP:** Mit Administratorzustimmung (`offline_access`) und Vorautorisierung bekommen MCP-Clients ohne Einwilligungsdialog Refresh-Tokens für die API. Sie liegen beim Anbieter des Clients, bei claude.ai also bei Anthropic, und erneuern den Zugriff ohne neue Anmeldung. Wer das nicht will, schaltet `mcp` nicht ein. Vorautorisiert ist nur die MCP-Registrierung des Projekts. Keine öffentlichen Clients von Microsoft (etwa VS Code, `aebc6443-996d-45c2-90f0-388ff96faa56`) in `auth.additionalClientIds` eintragen: Mit ihrer Client-ID lässt sich der Device-Code-Flow für Phishing nutzen, und nur Conditional Access im Tenant würde das sperren. Bis v0.18.1 bot `mcp.preauthorizedClientIds` dieses Opt-in; es ist entfallen.
 
 ## Lizenz
 

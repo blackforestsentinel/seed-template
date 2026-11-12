@@ -101,7 +101,7 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.18.1"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.19.0"
 
   name                 = local.cfg.project
   environment          = var.environment
@@ -127,7 +127,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.18.1"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.19.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -158,9 +158,8 @@ module "sso" {
     audience      = try(local.auth_existing.audience, null)
     # Clients der Registrierungen im anderen Tenant: Die API nimmt delegierte Tokens nur von ihnen,
     # der SPA und auth.additionalClientIds an. mcpClientId verlangt der Plan mit features.mcp.
-    mcp_client_id                = try(local.auth_existing.mcpClientId, null)
-    connector_client_id          = try(local.auth_existing.connectorClientId, null)
-    mcp_preauthorized_client_ids = try(compact(flatten([local.auth_existing.mcpPreauthorizedClientIds])), null)
+    mcp_client_id       = try(local.auth_existing.mcpClientId, null)
+    connector_client_id = try(local.auth_existing.connectorClientId, null)
   }
 
   # Personen-Komponenten (seed-web-people): delegierte Graph-Berechtigungen an der SPA und
@@ -177,9 +176,6 @@ module "sso" {
   mcp               = local.mcp
   mcp_custom_domain = try(lower(local.mcp_cfg.customDomain), null)
   mcp_redirect_uris = try(local.mcp_cfg.redirectUris, null)
-  # Weitere Clients mit eigener Entra-Registrierung, für mcp_access vorautorisiert und als
-  # Client zugelassen, etwa VS Code (mcp.preauthorizedClientIds); Standard leer.
-  mcp_preauthorized_client_ids = try(compact(flatten([local.mcp_cfg.preauthorizedClientIds])), [])
 
   # Custom Connector (setzt sso voraus): Client-Registrierung ohne Secret; Connector, Redirect-URI
   # und Federated Credential legt die Pipeline an (Output custom_connector).
@@ -188,7 +184,7 @@ module "sso" {
 
 # Alarme gehen an monitoring.recipients und owner; ohne beide gibt es weder Alarme noch Budget.
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.18.1"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.19.0"
   count  = length(local.alert_recipients) > 0 || local.owner != null ? 1 : 0
 
   name                       = local.cfg.project
@@ -213,7 +209,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.18.1"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.19.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project

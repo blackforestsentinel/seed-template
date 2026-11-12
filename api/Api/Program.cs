@@ -36,8 +36,8 @@ if (builder.Configuration.GetValue<bool>("Seed:Features:Sso"))
     builder.UseSeedAuth();
 }
 
-// Feature mcp aus project.yaml (setzt sso voraus): MCP-Endpunkt /api/mcp für Claude, VS Code
-// und andere KI-Werkzeuge. Werkzeuge sind Klassen mit [McpServerToolType], hier in Mcp/.
+// Feature mcp aus project.yaml (setzt sso voraus): MCP-Endpunkt /api/mcp für Claude und
+// andere KI-Werkzeuge. Werkzeuge sind Klassen mit [McpServerToolType], hier in Mcp/.
 if (builder.Configuration.GetValue<bool>("Seed:Features:Mcp"))
 {
     builder.AddSeedMcp()

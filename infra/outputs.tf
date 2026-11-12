@@ -79,7 +79,7 @@ output "directory_permissions" {
 
 # Leer statt null ohne mcp, wie bei static_web_app_url: lesbar mit terraform output -raw.
 output "mcp_url" {
-  description = "Adresse des MCP-Endpunkts für Claude, VS Code und andere Clients; mit mcp.customDomain die eigene Domain."
+  description = "Adresse des MCP-Endpunkts für Claude und andere Clients; mit mcp.customDomain die eigene Domain."
   value       = local.mcp ? coalesce(one(module.sso[*].mcp_resource), "${module.core.function_app_url}/api/mcp") : ""
 
   precondition {
