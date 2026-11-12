@@ -63,7 +63,8 @@ auth:
   #   roleFilter: false   # Auswahl nur mit App-Rolle: Application.Read.All, GroupMember.Read.All (Admin-Consent!)
   #   servicePrincipals: false   # auch Anwendungen und verwaltete Identitäten: Application.Read.All (Admin-Consent!)
   # roleFilter und servicePrincipals geben dem Frontend tenantweite Leserechte (README, „Sicherheit
-  # im Betrieb“); nur mit assignmentRequired: true.
+  # im Betrieb“) und schalten an der Enterprise App des Frontends „Zuweisung erforderlich“ ein:
+  # Ein Admin weist dort Personen oder Gruppen zu, sonst kommt niemand mehr ins Frontend.
   # Vorhandene App-Registrierung je Umgebung statt neuer, auch aus einem anderen Tenant.
   # Was der Admin dort einrichtet: README von seed-terraform, Modul sso. Den Scope der API stellt
   # er auf Einwilligung nur durch Admins und autorisiert die SPA dafür vor.
@@ -92,6 +93,9 @@ auth:
 #   customDomain: mcp.example.org
 #   # Ersetzt die Redirect-URIs der MCP-Client-Registrierung (Standard: Claude, Claude Code).
 #   redirectUris: [https://claude.ai/api/mcp/auth_callback, http://localhost/callback, http://127.0.0.1/callback]
+#   # Weitere Clients mit eigener Entra-Registrierung, die mcp_access ohne Einwilligungsdialog
+#   # bekommen und deren Tokens die API annimmt, etwa VS Code. Standard leer; README, Abschnitt mcp.
+#   preauthorizedClientIds: [aebc6443-996d-45c2-90f0-388ff96faa56]
 
 # Nur mit features.customConnector. Die Pipeline legt den Connector nach dem Deploy aus dem
 # OpenAPI-Dokument der API an (README, Abschnitt customConnector). Ohne environmentUrl entsteht in
