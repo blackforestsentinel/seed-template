@@ -7,6 +7,11 @@ project: my-app
 # TODO(onboarding): Adresse eintragen.
 owner: ""
 
+# Nur in Projekten aus dem zentralen Scaffold (seed-pipelines ab v0.20.0): Die Resource Groups
+# rg-<projekt>-<umgebung> legt das Scaffold vorab an, weil die Identität des Projekts Rechte nur
+# darauf bekommt; Terraform liest sie dann nur. Das Scaffold schreibt die Zeile selbst.
+# createResourceGroups: false
+
 features:
   # Login mit Entra ID: App-Registrierungen, Token-Prüfung in der API, MSAL im Frontend
   sso: false

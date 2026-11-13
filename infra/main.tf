@@ -101,14 +101,17 @@ locals {
 }
 
 module "core" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.19.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//core?ref=v0.20.0"
 
-  name                 = local.cfg.project
-  environment          = var.environment
-  location             = var.location
-  static_web_app_sku   = local.static_web_app
-  custom_domains       = local.custom_domains
-  cors_allowed_origins = local.cors_allowed_origins
+  name        = local.cfg.project
+  environment = var.environment
+  location    = var.location
+  # createResourceGroups: false in project.yaml, wenn das Scaffold die Resource Groups vorab
+  # angelegt hat (Identität je Projekt mit Rechten nur darauf); dann liest das Modul sie nur.
+  create_resource_group = try(local.cfg.createResourceGroups, true)
+  static_web_app_sku    = local.static_web_app
+  custom_domains        = local.custom_domains
+  cors_allowed_origins  = local.cors_allowed_origins
   # Eigene Settings zuerst, damit die Seed-eigenen bei gleichem Namen vorgehen; danach je
   # Feature das Flag und die App-Settings des Moduls.
   app_settings = merge(concat(
@@ -127,7 +130,7 @@ module "core" {
 }
 
 module "sso" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.19.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//sso?ref=v0.20.0"
   count  = local.sso ? 1 : 0
 
   name        = local.cfg.project
@@ -184,7 +187,7 @@ module "sso" {
 
 # Alarme gehen an monitoring.recipients und owner; ohne beide gibt es weder Alarme noch Budget.
 module "monitoring" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.19.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//monitoring?ref=v0.20.0"
   count  = length(local.alert_recipients) > 0 || local.owner != null ? 1 : 0
 
   name                       = local.cfg.project
@@ -209,7 +212,7 @@ module "monitoring" {
 # Secrets aus keyVault.secrets: Platzhalter im Vault, App-Settings Secrets__<Name> als
 # Key-Vault-Referenz. Die Werte setzt ein Mensch (README, „Secret setzen“).
 module "keyvault" {
-  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.19.0"
+  source = "git::https://github.com/blackforestsentinel/seed-terraform.git//keyvault?ref=v0.20.0"
   count  = local.key_vault ? 1 : 0
 
   name                           = local.cfg.project
