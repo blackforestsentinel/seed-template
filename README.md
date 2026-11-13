@@ -114,6 +114,8 @@ terraform init -backend=false -upgrade
 terraform providers lock -platform=linux_amd64 -platform=windows_amd64 -platform=darwin_arm64 -platform=darwin_amd64
 ```
 
+**Resource Groups aus dem Scaffold:** Projekte aus dem zentralen Scaffold (seed-pipelines ab v0.20.0) bekommen eine eigene Identität in Azure mit Rechten nur auf ihre Resource Groups `rg-<projekt>-<umgebung>`. Das Scaffold legt diese vorab an und schreibt `createResourceGroups: false` in `project.yaml`; Terraform liest die Resource Group dann nur (Modul `core`, `create_resource_group`). In anderen Projekten fehlt der Schlüssel, und Terraform legt die Resource Group wie bisher an. Nachträglich auf `false` umstellen nur mit `terraform state rm` der Resource Group, sonst plant Terraform ihr Löschen.
+
 Dasselbe gilt, wenn eine neue Version der Module einen weiteren Provider verlangt. Ein `terraform init` auf einer anderen Plattform ergänzt deren Prüfsummen in der Datei; solche Änderungen nicht committen oder die Plattform im Befehl oben ergänzen.
 
 ## Features
